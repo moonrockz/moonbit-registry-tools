@@ -8,6 +8,7 @@ The MoonBit registry (mooncakes.io) is the official package registry for the Moo
 
 - Set up a local/private registry for your organization
 - Mirror packages from mooncakes.io for offline access or faster builds
+- Mirror from multiple sources including private registries
 - Serve packages to your development team
 - Sync your local registry with remote git repositories
 
@@ -121,6 +122,43 @@ moonbit-registry config server.port
 moonbit-registry config server.port 9000
 ```
 
+### Manage Mirror Sources
+
+Configure multiple upstream sources for mirroring:
+
+```bash
+# List configured sources
+moonbit-registry source list
+
+# Add mooncakes.io using a preset
+moonbit-registry source add mooncakes --from-preset mooncakes
+
+# Add a custom private registry
+moonbit-registry source add mycompany \
+  --url https://registry.mycompany.com \
+  --index-url https://registry.mycompany.com/git/index \
+  --priority 50
+
+# Add a source with authentication
+moonbit-registry source add private \
+  --url https://private.example.com \
+  --index-url https://private.example.com/git/index
+# Then edit registry.toml to add auth:
+# [sources.auth]
+# type = "bearer"
+# token = "${REGISTRY_TOKEN}"
+
+# Set the default source for mirroring
+moonbit-registry source default mooncakes
+
+# Enable/disable sources
+moonbit-registry source enable mycompany
+moonbit-registry source disable mooncakes
+
+# Remove a source
+moonbit-registry source remove mycompany
+```
+
 ### Sync with Remote Git
 
 If you want to share your registry index with others:
@@ -147,10 +185,29 @@ Configuration is stored in `registry.toml`. See `registry.example.toml` for all 
 name = "my-company-registry"
 data_dir = "./data"
 
-[upstream]
-enabled = true
+# Multiple sources (recommended)
+[[sources]]
+name = "mooncakes"
+type = "mooncakes"
 url = "https://mooncakes.io"
 index_url = "https://mooncakes.io/git/index"
+index_type = "git"
+enabled = true
+priority = 100
+
+[[sources]]
+name = "partner"
+type = "moonbit-registry"
+url = "https://partner.example.com/registry"
+index_url = "https://partner.example.com/registry/git/index"
+index_type = "git"
+enabled = true
+priority = 50
+[sources.auth]
+type = "bearer"
+token = "${PARTNER_REGISTRY_TOKEN}"  # Environment variable
+
+default_source = "mooncakes"
 
 [mirror]
 auto_sync = false
@@ -168,6 +225,23 @@ branch = "main"
 auto_push = false
 ```
 
+### Authentication
+
+Sources can use bearer token or basic authentication:
+
+```toml
+# Bearer token (recommended)
+[sources.auth]
+type = "bearer"
+token = "${MY_TOKEN}"  # Use env var for security
+
+# Basic auth
+[sources.auth]
+type = "basic"
+username = "user"
+password = "${MY_PASSWORD}"
+```
+
 ## API Endpoints
 
 When running `moonbit-registry serve`, the following endpoints are available:
@@ -179,6 +253,129 @@ When running `moonbit-registry serve`, the following endpoints are available:
 | `GET /git/index` | Git index (dumb HTTP protocol) |
 | `GET /user/{username}/{package}/{version}.zip` | Download package |
 | `GET /user/{username}/{package}` | Package metadata (JSON) |
+
+## Getting Started
+
+### Scenario 1: Mirror from mooncakes.io for Offline Development
+
+Set up a local cache of packages for offline development or faster CI builds.
+
+```bash
+# Initialize a local registry
+moonbit-registry init ./my-registry
+cd my-registry
+
+# Mirror specific packages you need
+moonbit-registry mirror "moonbitlang/core" "moonbitlang/x"
+
+# Or mirror all packages from an organization
+moonbit-registry mirror "moonbitlang/*"
+
+# Start the server
+moonbit-registry serve --port 8080
+
+# In another terminal, configure moon to use your local registry
+export MOONCAKES_REGISTRY=http://localhost:8080
+
+# Now moon commands use your local mirror
+moon new my-project
+cd my-project
+moon add moonbitlang/x
+moon build
+```
+
+### Scenario 2: Set Up a Team Registry with Multiple Sources
+
+Create a registry that mirrors from mooncakes.io and a partner's private registry.
+
+```bash
+# Initialize registry
+moonbit-registry init ./team-registry
+cd team-registry
+
+# Add mooncakes.io as primary source (using preset)
+moonbit-registry source add mooncakes --from-preset mooncakes
+
+# Add a partner's private registry
+moonbit-registry source add partner \
+  --url https://partner.example.com/registry \
+  --index-url https://partner.example.com/registry/git/index
+
+# List configured sources
+moonbit-registry source list
+
+# Mirror packages from the default source (mooncakes)
+moonbit-registry mirror "moonbitlang/*"
+
+# Mirror from a specific source
+moonbit-registry mirror -s partner "partner-org/*"
+
+# Start serving
+moonbit-registry serve
+```
+
+### Scenario 3: Air-Gapped Environment Setup
+
+For environments without internet access, pre-populate a registry and transfer it.
+
+```bash
+# On a machine WITH internet access:
+moonbit-registry init ./offline-registry
+cd offline-registry
+
+# Mirror everything your team needs
+moonbit-registry mirror --full  # Or specific patterns
+
+# The registry is now in ./offline-registry/data/
+# Transfer the entire directory to your air-gapped environment
+
+# On the air-gapped machine:
+cd /path/to/offline-registry
+moonbit-registry serve --host 0.0.0.0 --port 8080
+
+# Configure all developer machines:
+export MOONCAKES_REGISTRY=http://registry-server:8080
+```
+
+### Scenario 4: CI/CD Pipeline Cache
+
+Speed up your CI builds by caching packages locally.
+
+```yaml
+# .github/workflows/ci.yml
+jobs:
+  build:
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache MoonBit packages
+        uses: actions/cache@v4
+        with:
+          path: .moonbit-registry
+          key: moonbit-packages-${{ hashFiles('moon.mod.json') }}
+
+      - name: Start local registry
+        run: |
+          moonbit-registry init .moonbit-registry 2>/dev/null || true
+          moonbit-registry serve -d .moonbit-registry &
+          sleep 2
+
+      - name: Build with local cache
+        env:
+          MOONCAKES_REGISTRY: http://localhost:8080
+        run: moon build
+```
+
+### Publishing Packages (Coming Soon)
+
+> **Note:** Publishing packages to a private registry is not yet supported. Currently, this tool only supports mirroring (pulling) packages from upstream registries.
+>
+> Planned features:
+> - `moonbit-registry publish` command for uploading packages
+> - API endpoint for package uploads
+> - Authentication for publish operations
+>
+> For now, to share internal packages, you can manually add them to the registry's `data/packages/` directory and update the index.
 
 ## Development
 
@@ -212,12 +409,13 @@ bun test --watch
 If you have [mise](https://mise.jdx.dev) installed:
 
 ```bash
-mise run build    # Build the CLI
-mise run test     # Run tests
-mise run dev      # Development mode
-mise run lint     # Lint code
-mise run fmt      # Format code
-mise run clean    # Clean artifacts
+mise run build     # Build the CLI
+mise run test      # Run tests
+mise run test:e2e  # Run E2E tests (requires moon CLI)
+mise run dev       # Development mode
+mise run lint      # Lint code
+mise run fmt       # Format code
+mise run clean     # Clean artifacts
 ```
 
 ## License
