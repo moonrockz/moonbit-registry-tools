@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+#MISE description="Run E2E tests (requires moon CLI)"
+#USAGE flag "-v --verbose" help="Verbose output"
+
+set -e
+
+# Check if moon CLI is available
+if ! command -v moon &> /dev/null; then
+  echo "Error: moon CLI is not installed"
+  echo "Install from: https://www.moonbitlang.com/download/"
+  exit 1
+fi
+
+echo "Moon CLI version: $(moon version)"
+echo ""
+
+args=""
+[ "${usage_verbose:-false}" = "true" ] && args="$args --verbose"
+
+# Run E2E tests with extended timeout
+bun test tests/e2e/ $args --timeout 300000

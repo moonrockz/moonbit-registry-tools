@@ -4,7 +4,8 @@ bun = "1.3.7"
 
 [tasks]
 build = { run = "bash .mise/tasks/build", description = "Build the CLI binary" }
-test = { run = "bash .mise/tasks/test", description = "Run tests" }
+test = { run = "bash .mise/tasks/test/_default", description = "Run tests" }
+"test:e2e" = { run = "bash .mise/tasks/test/e2e", description = "Run E2E tests (requires moon CLI)" }
 dev = { run = "bash .mise/tasks/dev", description = "Run in development mode" }
 lint = { run = "bash .mise/tasks/lint", depends = ["yamllint"], description = "Lint code" }
 yamllint = { run = "bash .mise/tasks/yamllint", description = "Lint YAML files" }
