@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Lint YAML files"
+
+set -e
+
+uvx yamllint -c .yamllint.yml .github/

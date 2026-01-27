@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+#MISE description="Run tests"
+#USAGE flag "-w --watch" help="Watch mode"
+#USAGE flag "--coverage" help="Generate coverage report"
+#USAGE flag "--sequential" help="Run test files sequentially (workaround for Windows segfault)"
+
+set -e
+
+args=""
+[ "${usage_watch:-false}" = "true" ] && args="$args --watch"
+[ "${usage_coverage:-false}" = "true" ] && args="$args --coverage"
+
+# Workaround for Bun segfault on Windows when running multiple test files
+# See: https://github.com/oven-sh/bun/issues/22452
+if [ "${usage_sequential:-false}" = "true" ] || [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "cygwin" ]] || [[ -n "$WINDIR" ]]; then
+  echo "Running tests sequentially (Windows workaround)..."
+  failed=0
+  for testfile in tests/**/*.test.ts; do
+    echo "=== $testfile ==="
+    if ! bun test "$testfile" $args; then
+      failed=1
+    fi
+  done
+  exit $failed
+else
+  bun test $args
+fi

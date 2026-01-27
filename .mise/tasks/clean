@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Clean build artifacts"
+
+set -e
+
+rm -rf dist/ node_modules/.cache/ coverage/
+echo "Cleaned build artifacts"

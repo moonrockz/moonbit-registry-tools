@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+#MISE description="Build the CLI binary"
+#MISE sources=["src/**/*.ts", "package.json"]
+#MISE outputs=["dist/moonbit-registry"]
+
+set -e
+
+mkdir -p dist
+bun build src/index.ts --compile --outfile dist/moonbit-registry
+echo "Built dist/moonbit-registry"
