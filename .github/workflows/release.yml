@@ -16,6 +16,9 @@ jobs:
           - os: ubuntu-latest
             target: linux-x64
             binary: moonbit-registry
+          - os: ubuntu-latest
+            target: linux-arm64
+            binary: moonbit-registry
           - os: macos-latest
             target: darwin-x64
             binary: moonbit-registry
