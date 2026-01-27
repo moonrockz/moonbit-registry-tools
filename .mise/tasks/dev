@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Run in development mode with watch"
+
+set -e
+
+bun --watch src/index.ts -- "$@"

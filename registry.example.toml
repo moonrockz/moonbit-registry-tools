@@ -1,0 +1,55 @@
+# MoonBit Registry Configuration Example
+# Copy this file to registry.toml and customize for your needs
+
+[registry]
+# Name for your registry (used in logs and identification)
+name = "my-company-registry"
+
+# Directory to store index and packages
+data_dir = "./data"
+
+[upstream]
+# Enable fetching from upstream mooncakes.io
+enabled = true
+
+# Upstream registry URL for package downloads
+url = "https://mooncakes.io"
+
+# Git index URL for package metadata
+index_url = "https://mooncakes.io/git/index"
+
+[mirror]
+# Automatically sync with upstream on a schedule
+auto_sync = false
+
+# Sync interval (e.g., "1h", "30m", "1d")
+sync_interval = "1h"
+
+# Package patterns to mirror (empty = mirror on demand)
+# Examples:
+#   - "moonbitlang/*" - all moonbitlang packages
+#   - "company/pkg-*" - packages matching prefix
+#   - "exact/package" - specific package
+packages = []
+
+[server]
+# Host to bind the server to
+host = "0.0.0.0"
+
+# Port for the registry server
+port = 8080
+
+# Base URL for the registry (used in generated URLs)
+# Change this to your actual domain in production
+base_url = "http://localhost:8080"
+
+[git]
+# Remote URL to push index updates (optional)
+# Leave empty to only use local storage
+remote_url = ""
+
+# Branch name for the index
+branch = "main"
+
+# Automatically push index changes to remote
+auto_push = false

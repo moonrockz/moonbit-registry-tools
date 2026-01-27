@@ -1,3 +1,32 @@
+# ===================
+# TypeScript / Bun
+# ===================
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Cache
+.cache/
+*.tsbuildinfo
+node_modules/.cache/
+
+# Bun
+bun.lockb
+
+# Coverage
+coverage/
+
+# Local registry data (for testing)
+data/
+my-registry/
+
+# ===================
+# Python (legacy)
+# ===================
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

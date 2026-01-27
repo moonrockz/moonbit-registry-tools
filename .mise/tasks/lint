@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#MISE description="Lint code"
+#USAGE flag "--fix" help="Auto-fix issues"
+
+set -e
+
+args="check"
+[ "${usage_fix:-false}" = "true" ] && args="$args --write"
+bun x biome $args .

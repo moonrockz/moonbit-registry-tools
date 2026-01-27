@@ -1,0 +1,10 @@
+[tools]
+bun = "1.3.7"
+
+[tasks]
+build = { run = ".mise/tasks/build", description = "Build the CLI binary" }
+test = { run = ".mise/tasks/test", description = "Run tests" }
+dev = { run = ".mise/tasks/dev", description = "Run in development mode" }
+lint = { run = ".mise/tasks/lint", description = "Lint code" }
+fmt = { run = ".mise/tasks/fmt", description = "Format code" }
+clean = { run = ".mise/tasks/clean", description = "Clean build artifacts" }

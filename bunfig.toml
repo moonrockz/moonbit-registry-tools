@@ -1,0 +1,8 @@
+[install]
+# Prefer offline mode for faster installs
+prefer-offline = true
+
+[test]
+# Test configuration
+coverage = false
+coverageDir = "coverage"

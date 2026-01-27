@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Format code"
+
+set -e
+
+bun x biome format --write .
