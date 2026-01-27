@@ -6,12 +6,11 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { RegistryConfig, PackageVersionId } from "./types.ts";
-import { formatPackageVersionId } from "./types.ts";
-import fs from "../utils/fs.ts";
-import crypto from "../utils/crypto.ts";
-import logger from "../utils/logger.ts";
 import { DATA_DIRS } from "../config/defaults.ts";
+import crypto from "../utils/crypto.ts";
+import fs from "../utils/fs.ts";
+import logger from "../utils/logger.ts";
+import type { PackageVersionId, RegistryConfig } from "./types.ts";
 
 export class PackageStore {
   private packagesDir: string;
@@ -47,7 +46,7 @@ export class PackageStore {
     username: string,
     name: string,
     version: string,
-    expectedChecksum?: string
+    expectedChecksum?: string,
   ): Promise<string> {
     const packagePath = this.getPackagePath(username, name, version);
 

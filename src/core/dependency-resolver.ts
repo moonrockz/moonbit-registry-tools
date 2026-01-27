@@ -4,11 +4,11 @@
  * Handles glob pattern matching and transitive dependency resolution.
  */
 
-import type { DependencyResolution, PackageMetadata, MirrorOptions } from "./types.ts";
-import { parsePackageId } from "./types.ts";
+import logger from "../utils/logger.ts";
 import type IndexManager from "./index-manager.ts";
 import type PackageStore from "./package-store.ts";
-import logger from "../utils/logger.ts";
+import type { DependencyResolution, MirrorOptions, PackageMetadata } from "./types.ts";
+import { parsePackageId } from "./types.ts";
 
 export class DependencyResolver {
   private indexManager: IndexManager;
@@ -72,7 +72,7 @@ export class DependencyResolver {
   /** Resolve transitive dependencies for matched packages */
   private async resolveTransitiveDeps(
     result: DependencyResolution,
-    originalPatterns: string[]
+    originalPatterns: string[],
   ): Promise<void> {
     const toProcess = new Set(result.packages);
     const processed = new Set<string>();
@@ -108,7 +108,7 @@ export class DependencyResolver {
           if (!result.skipped.has(depName)) {
             result.skipped.set(depName, []);
           }
-          result.skipped.get(depName)!.push(pkgName);
+          result.skipped.get(depName)?.push(pkgName);
         }
       }
     }
@@ -151,8 +151,7 @@ export class DependencyResolver {
       if (result.cached.has(dep)) continue;
 
       logger.warn(
-        `Dependency '${dep}' required by [${requiredBy.join(", ")}] ` +
-          `is not included in mirror patterns and not cached`
+        `Dependency '${dep}' required by [${requiredBy.join(", ")}] is not included in mirror patterns and not cached`,
       );
     }
   }

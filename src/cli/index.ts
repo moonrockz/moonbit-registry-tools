@@ -3,12 +3,12 @@
  */
 
 import { Command } from "commander";
+import { setLogLevel, setQuiet } from "../utils/logger.ts";
+import { registerConfigCommand } from "./commands/config.ts";
 import { registerInitCommand } from "./commands/init.ts";
 import { registerMirrorCommand } from "./commands/mirror.ts";
 import { registerServeCommand } from "./commands/serve.ts";
-import { registerConfigCommand } from "./commands/config.ts";
 import { registerSyncCommand } from "./commands/sync.ts";
-import { setLogLevel, setQuiet } from "../utils/logger.ts";
 
 export function createCli(): Command {
   const program = new Command();

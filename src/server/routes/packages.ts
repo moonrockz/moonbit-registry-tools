@@ -12,7 +12,7 @@ export function createPackageRoutes(registry: Registry) {
   async function handlePackageDownload(
     username: string,
     packageName: string,
-    version: string
+    version: string,
   ): Promise<Response> {
     // Check if package exists locally
     let packagePath = registry.packageStore.getPackageFile(username, packageName, version);
@@ -32,7 +32,7 @@ export function createPackageRoutes(registry: Registry) {
             username,
             packageName,
             version,
-            checksum
+            checksum,
           );
         } catch (err) {
           logger.error(`Failed to fetch package from upstream: ${err}`);
@@ -66,10 +66,7 @@ export function createPackageRoutes(registry: Registry) {
   }
 
   /** Handle package info request (JSON metadata) */
-  async function handlePackageInfo(
-    username: string,
-    packageName: string
-  ): Promise<Response> {
+  async function handlePackageInfo(username: string, packageName: string): Promise<Response> {
     const metadata = await registry.getPackage(username, packageName);
 
     if (!metadata) {
@@ -87,12 +84,10 @@ export function createPackageRoutes(registry: Registry) {
   /** Main router for package endpoints */
   return async function handlePackageRequest(
     _request: Request,
-    pathname: string
+    pathname: string,
   ): Promise<Response | null> {
     // Match /user/{username}/{package}/{version}.zip
-    const downloadMatch = pathname.match(
-      /^\/user\/([^/]+)\/([^/]+)\/([^/]+)\.zip$/
-    );
+    const downloadMatch = pathname.match(/^\/user\/([^/]+)\/([^/]+)\/([^/]+)\.zip$/);
     if (downloadMatch) {
       const [, username, packageName, version] = downloadMatch;
       return handlePackageDownload(username, packageName, version);

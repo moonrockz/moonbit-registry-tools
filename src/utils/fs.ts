@@ -2,9 +2,9 @@
  * File system utilities
  */
 
-import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
-import { readFile, writeFile, mkdir, rm, readdir, stat, copyFile } from "node:fs/promises";
-import { join, dirname, relative, resolve } from "node:path";
+import { existsSync, mkdirSync, statSync } from "node:fs";
+import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { dirname, join, relative, resolve } from "node:path";
 
 /** Ensure a directory exists, creating it if necessary */
 export async function ensureDir(dir: string): Promise<void> {
@@ -53,13 +53,13 @@ export async function readJsonl<T>(path: string): Promise<T[]> {
 /** Write JSONL file */
 export async function writeJsonl(path: string, items: unknown[]): Promise<void> {
   const content = items.map((item) => JSON.stringify(item)).join("\n");
-  await writeText(path, content + "\n");
+  await writeText(path, `${content}\n`);
 }
 
 /** Append to a JSONL file */
 export async function appendJsonl(path: string, item: unknown): Promise<void> {
   await ensureDir(dirname(path));
-  const line = JSON.stringify(item) + "\n";
+  const line = `${JSON.stringify(item)}\n`;
   const file = Bun.file(path);
   const existing = (await file.exists()) ? await file.text() : "";
   await Bun.write(path, existing + line);

@@ -2,9 +2,9 @@
  * Git operations utility
  */
 
-import { $ } from "bun";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { $ } from "bun";
 import logger from "./logger.ts";
 
 export interface GitResult {
@@ -83,7 +83,7 @@ export async function push(
   dir: string,
   remote = "origin",
   branch?: string,
-  setUpstream = false
+  setUpstream = false,
 ): Promise<GitResult> {
   logger.debug(`Pushing to ${remote} in ${dir}`);
   const args = ["push"];
@@ -143,11 +143,7 @@ export async function hasRemote(dir: string, name: string): Promise<boolean> {
 }
 
 /** Configure git user for a repository */
-export async function configureUser(
-  dir: string,
-  name: string,
-  email: string
-): Promise<GitResult> {
+export async function configureUser(dir: string, name: string, email: string): Promise<GitResult> {
   const nameResult = await runGit(["config", "user.name", name], dir);
   if (!nameResult.success) return nameResult;
   return runGit(["config", "user.email", email], dir);

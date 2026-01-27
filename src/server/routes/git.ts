@@ -5,8 +5,8 @@
  */
 
 import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { stat } from "node:fs/promises";
+import { join } from "node:path";
 import type { Registry } from "../../core/registry.ts";
 import logger from "../../utils/logger.ts";
 
@@ -91,7 +91,7 @@ export function createGitRoutes(registry: Registry) {
   /** Main router for git endpoints */
   return async function handleGitRequest(
     request: Request,
-    pathname: string
+    pathname: string,
   ): Promise<Response | null> {
     // Remove /git/index prefix
     const gitPath = pathname.replace(/^\/git\/index\/?/, "");

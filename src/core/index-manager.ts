@@ -7,12 +7,12 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { PackageEntry, PackageMetadata, RegistryConfig } from "./types.ts";
-import { parsePackageId } from "./types.ts";
+import { DATA_DIRS } from "../config/defaults.ts";
 import fs from "../utils/fs.ts";
 import git from "../utils/git.ts";
 import logger from "../utils/logger.ts";
-import { DATA_DIRS } from "../config/defaults.ts";
+import type { PackageEntry, PackageMetadata, RegistryConfig } from "./types.ts";
+import { parsePackageId } from "./types.ts";
 
 export class IndexManager {
   private indexDir: string;

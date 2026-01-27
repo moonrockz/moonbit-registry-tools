@@ -5,8 +5,8 @@
 import type { Command } from "commander";
 import { Registry } from "../../core/registry.ts";
 import createServer from "../../server/index.ts";
-import { resolvePath, handleError } from "../utils.ts";
 import logger from "../../utils/logger.ts";
+import { handleError, resolvePath } from "../utils.ts";
 
 interface ServeCommandOptions {
   port?: string;

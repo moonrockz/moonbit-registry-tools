@@ -2,10 +2,10 @@
  * Tests for server routes
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Registry } from "../../src/core/registry.ts";
 import createServer from "../../src/server/index.ts";
 

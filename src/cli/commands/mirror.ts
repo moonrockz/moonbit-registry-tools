@@ -5,8 +5,8 @@
 import type { Command } from "commander";
 import { Registry } from "../../core/registry.ts";
 import type { MirrorOptions } from "../../core/types.ts";
-import { resolvePath, handleError } from "../utils.ts";
 import logger, { setQuiet } from "../../utils/logger.ts";
+import { handleError, resolvePath } from "../utils.ts";
 
 interface MirrorCommandOptions {
   full?: boolean;
@@ -32,11 +32,12 @@ export function registerMirrorCommand(program: Command): void {
         const registryPath = resolvePath(options.dir ?? ".");
         const registry = await Registry.load(registryPath);
 
+        let patternsToUse = patterns;
         if (!options.full && patterns.length === 0) {
           // Check if config has default patterns
           if (registry.config.mirror.packages.length > 0) {
-            patterns = registry.config.mirror.packages;
-            logger.info(`Using patterns from config: ${patterns.join(", ")}`);
+            patternsToUse = registry.config.mirror.packages;
+            logger.info(`Using patterns from config: ${patternsToUse.join(", ")}`);
           } else {
             console.error("Error: No patterns specified. Use --full to mirror all packages.");
             console.error("Examples:");
@@ -48,7 +49,7 @@ export function registerMirrorCommand(program: Command): void {
         }
 
         const mirrorOptions: MirrorOptions = {
-          patterns,
+          patterns: patternsToUse,
           full: options.full ?? false,
           strict: options.strict ?? false,
           quiet: options.quiet ?? false,
@@ -56,7 +57,7 @@ export function registerMirrorCommand(program: Command): void {
 
         logger.info(`Mirroring packages${options.full ? " (full)" : ""}`);
         if (!options.full) {
-          logger.info(`Patterns: ${patterns.join(", ")}`);
+          logger.info(`Patterns: ${patternsToUse.join(", ")}`);
         }
         if (options.strict) {
           logger.info("Strict mode: dependencies will not be automatically included");

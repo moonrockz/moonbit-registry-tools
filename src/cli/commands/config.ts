@@ -4,8 +4,8 @@
 
 import type { Command } from "commander";
 import configLoader from "../../config/loader.ts";
-import { resolvePath, handleError, printTable } from "../utils.ts";
 import logger from "../../utils/logger.ts";
+import { handleError, resolvePath } from "../utils.ts";
 
 interface ConfigCommandOptions {
   dir?: string;
@@ -16,43 +16,45 @@ export function registerConfigCommand(program: Command): void {
     .command("config [key] [value]")
     .description("View or modify configuration")
     .option("-d, --dir <path>", "Registry directory (default: current directory)")
-    .action(async (key: string | undefined, value: string | undefined, options: ConfigCommandOptions) => {
-      try {
-        const registryPath = resolvePath(options.dir ?? ".");
-        const configPath = `${registryPath}/registry.toml`;
-        const config = await configLoader.load(configPath);
+    .action(
+      async (key: string | undefined, value: string | undefined, options: ConfigCommandOptions) => {
+        try {
+          const registryPath = resolvePath(options.dir ?? ".");
+          const configPath = `${registryPath}/registry.toml`;
+          const config = await configLoader.load(configPath);
 
-        // No arguments - show all config
-        if (!key) {
-          console.log("Current configuration:\n");
-          printConfigSection("registry", config.registry);
-          printConfigSection("upstream", config.upstream);
-          printConfigSection("mirror", config.mirror);
-          printConfigSection("server", config.server);
-          printConfigSection("git", config.git);
-          return;
-        }
-
-        // Key only - show value
-        if (!value) {
-          const currentValue = configLoader.getValue(config, key);
-          if (currentValue === undefined) {
-            console.error(`Unknown configuration key: ${key}`);
-            process.exit(1);
+          // No arguments - show all config
+          if (!key) {
+            console.log("Current configuration:\n");
+            printConfigSection("registry", config.registry);
+            printConfigSection("upstream", config.upstream);
+            printConfigSection("mirror", config.mirror);
+            printConfigSection("server", config.server);
+            printConfigSection("git", config.git);
+            return;
           }
-          console.log(`${key} = ${formatValue(currentValue)}`);
-          return;
-        }
 
-        // Key and value - set value
-        const parsedValue = parseValue(value);
-        configLoader.setValue(config, key, parsedValue);
-        await configLoader.save(config, configPath);
-        logger.success(`Set ${key} = ${formatValue(parsedValue)}`);
-      } catch (error) {
-        handleError(error);
-      }
-    });
+          // Key only - show value
+          if (!value) {
+            const currentValue = configLoader.getValue(config, key);
+            if (currentValue === undefined) {
+              console.error(`Unknown configuration key: ${key}`);
+              process.exit(1);
+            }
+            console.log(`${key} = ${formatValue(currentValue)}`);
+            return;
+          }
+
+          // Key and value - set value
+          const parsedValue = parseValue(value);
+          configLoader.setValue(config, key, parsedValue);
+          await configLoader.save(config, configPath);
+          logger.success(`Set ${key} = ${formatValue(parsedValue)}`);
+        } catch (error) {
+          handleError(error);
+        }
+      },
+    );
 }
 
 function printConfigSection(name: string, section: Record<string, unknown>): void {

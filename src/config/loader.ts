@@ -9,8 +9,8 @@ import type { RegistryConfig } from "../core/types.ts";
 import { DEFAULT_CONFIG } from "../core/types.ts";
 import fs from "../utils/fs.ts";
 import logger from "../utils/logger.ts";
-import { validateConfig, ConfigValidationError } from "./schema.ts";
 import { CONFIG_FILE_NAME } from "./defaults.ts";
+import { ConfigValidationError, validateConfig } from "./schema.ts";
 
 /** Find the config file by searching up the directory tree */
 export function findConfigFile(startDir?: string): string | null {
@@ -94,7 +94,7 @@ function generateToml(config: RegistryConfig): string {
   lines.push(`branch = "${config.git.branch}"`);
   lines.push(`auto_push = ${config.git.auto_push}`);
 
-  return lines.join("\n") + "\n";
+  return `${lines.join("\n")}\n`;
 }
 
 /** Create a default config file */

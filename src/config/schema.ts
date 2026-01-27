@@ -9,7 +9,7 @@ import { DEFAULT_CONFIG } from "../core/types.ts";
 export class ConfigValidationError extends Error {
   constructor(
     message: string,
-    public field: string
+    public field: string,
   ) {
     super(`Configuration error in '${field}': ${message}`);
     this.name = "ConfigValidationError";
@@ -17,11 +17,7 @@ export class ConfigValidationError extends Error {
 }
 
 /** Validate a string field */
-function validateString(
-  value: unknown,
-  field: string,
-  required = false
-): string {
+function validateString(value: unknown, field: string, required = false): string {
   if (value === undefined || value === null) {
     if (required) {
       throw new ConfigValidationError("Field is required", field);
@@ -35,12 +31,7 @@ function validateString(
 }
 
 /** Validate a number field */
-function validateNumber(
-  value: unknown,
-  field: string,
-  min?: number,
-  max?: number
-): number {
+function validateNumber(value: unknown, field: string, min?: number, max?: number): number {
   if (typeof value !== "number") {
     throw new ConfigValidationError("Must be a number", field);
   }
@@ -105,7 +96,7 @@ function deepMerge<T extends Record<string, unknown>>(target: T, source: Partial
     ) {
       (result as Record<string, unknown>)[key] = deepMerge(
         targetVal as Record<string, unknown>,
-        sourceVal as Record<string, unknown>
+        sourceVal as Record<string, unknown>,
       );
     } else if (sourceVal !== undefined) {
       (result as Record<string, unknown>)[key] = sourceVal;

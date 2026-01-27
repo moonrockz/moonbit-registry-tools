@@ -6,15 +6,15 @@
 
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
-import type { RegistryConfig, MirrorOptions, PackageMetadata } from "./types.ts";
-import { DEFAULT_CONFIG, parsePackageId, formatPackageVersionId } from "./types.ts";
-import IndexManager from "./index-manager.ts";
-import PackageStore from "./package-store.ts";
-import DependencyResolver from "./dependency-resolver.ts";
+import { CONFIG_FILE_NAME, DATA_DIRS } from "../config/defaults.ts";
 import configLoader from "../config/loader.ts";
 import fs from "../utils/fs.ts";
 import logger from "../utils/logger.ts";
-import { CONFIG_FILE_NAME, DATA_DIRS } from "../config/defaults.ts";
+import DependencyResolver from "./dependency-resolver.ts";
+import IndexManager from "./index-manager.ts";
+import PackageStore from "./package-store.ts";
+import type { MirrorOptions, PackageMetadata, RegistryConfig } from "./types.ts";
+import { DEFAULT_CONFIG, formatPackageVersionId, parsePackageId } from "./types.ts";
 
 export class Registry {
   public config: RegistryConfig;
@@ -45,7 +45,10 @@ export class Registry {
     }
 
     // Make data_dir absolute relative to root
-    if (!config.registry.data_dir.startsWith("/") && !config.registry.data_dir.match(/^[A-Za-z]:\\/)) {
+    if (
+      !config.registry.data_dir.startsWith("/") &&
+      !config.registry.data_dir.match(/^[A-Za-z]:\\/)
+    ) {
       config.registry.data_dir = join(rootDir, config.registry.data_dir);
     }
 
@@ -104,7 +107,9 @@ export class Registry {
     // Download packages
     const toDownload = Array.from(resolution.packages).filter((p) => !resolution.cached.has(p));
 
-    logger.info(`Found ${resolution.packages.size} packages to mirror (${toDownload.length} to download)`);
+    logger.info(
+      `Found ${resolution.packages.size} packages to mirror (${toDownload.length} to download)`,
+    );
 
     let downloaded = 0;
     let failed = 0;
@@ -129,11 +134,13 @@ export class Registry {
             pkgId.username,
             pkgId.name,
             version.version,
-            version.checksum
+            version.checksum,
           );
           downloaded++;
         } catch (err) {
-          logger.error(`Failed to download ${formatPackageVersionId({ ...pkgId, version: version.version })}: ${err}`);
+          logger.error(
+            `Failed to download ${formatPackageVersionId({ ...pkgId, version: version.version })}: ${err}`,
+          );
           failed++;
         }
       }

@@ -6,7 +6,7 @@
 
 import type { Registry } from "../core/registry.ts";
 import logger from "../utils/logger.ts";
-import { requestLogger, cors, errorHandler, compose } from "./middleware.ts";
+import { compose, cors, errorHandler, requestLogger } from "./middleware.ts";
 import createGitRoutes from "./routes/git.ts";
 import createPackageRoutes from "./routes/packages.ts";
 
@@ -46,7 +46,7 @@ export function createServer(registry: Registry, options: ServerOptions = {}) {
         }),
         {
           headers: { "Content-Type": "application/json" },
-        }
+        },
       );
     }
 
