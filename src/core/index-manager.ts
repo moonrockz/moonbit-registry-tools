@@ -147,7 +147,9 @@ export class IndexManager {
         })),
       };
     } catch (err) {
-      logger.error(`Failed to read package index for ${username}/${packageName} from source: ${err}`);
+      logger.error(
+        `Failed to read package index for ${username}/${packageName} from source: ${err}`,
+      );
       return null;
     }
   }

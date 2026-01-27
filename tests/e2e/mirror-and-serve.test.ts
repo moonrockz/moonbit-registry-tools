@@ -10,11 +10,11 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import type { Subprocess } from "bun";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Subprocess } from "bun";
 import { $ } from "bun";
 
 // Timeout for E2E tests (network operations may be slow)
@@ -95,27 +95,15 @@ describe("E2E: Mirror and Serve", () => {
       // Step 3: Start server in background
       console.log(`Step 3: Starting server on port ${SERVER_PORT}...`);
       serverProcess = Bun.spawn(
-        [
-          "bun",
-          cliPath,
-          "serve",
-          "--port",
-          SERVER_PORT.toString(),
-          "-d",
-          registryDir,
-        ],
+        ["bun", cliPath, "serve", "--port", SERVER_PORT.toString(), "-d", registryDir],
         {
           stdout: "pipe",
           stderr: "pipe",
-        }
+        },
       );
 
       // Wait for server to be ready
-      await waitForServer(
-        `http://localhost:${SERVER_PORT}/health`,
-        30_000,
-        serverProcess
-      );
+      await waitForServer(`http://localhost:${SERVER_PORT}/health`, 30_000, serverProcess);
       console.log("Server is ready");
 
       // Step 4: Create a test MoonBit project
@@ -129,18 +117,12 @@ describe("E2E: Mirror and Serve", () => {
         deps: {},
         "test-deps": {},
       };
-      await writeFile(
-        join(projectDir, "moon.mod.json"),
-        JSON.stringify(moonMod, null, 2)
-      );
+      await writeFile(join(projectDir, "moon.mod.json"), JSON.stringify(moonMod, null, 2));
 
       // Create moon.pkg.json for the main package
       const srcDir = join(projectDir, "src");
       await mkdir(srcDir, { recursive: true });
-      await writeFile(
-        join(srcDir, "moon.pkg.json"),
-        JSON.stringify({ is_main: true }, null, 2)
-      );
+      await writeFile(join(srcDir, "moon.pkg.json"), JSON.stringify({ is_main: true }, null, 2));
 
       // Create a minimal main.mbt file
       await writeFile(join(srcDir, "main.mbt"), 'fn main { println("hello") }\n');
@@ -156,9 +138,7 @@ describe("E2E: Mirror and Serve", () => {
 
       // Step 6: Verify moon.mod.json contains the dependency
       console.log("Step 6: Verifying dependency was added...");
-      const updatedMoonMod = JSON.parse(
-        await readFile(join(projectDir, "moon.mod.json"), "utf-8")
-      );
+      const updatedMoonMod = JSON.parse(await readFile(join(projectDir, "moon.mod.json"), "utf-8"));
       expect(updatedMoonMod.deps).toBeDefined();
       expect(Object.keys(updatedMoonMod.deps)).toContain(`${username}/${pkgName}`);
 
@@ -169,7 +149,7 @@ describe("E2E: Mirror and Serve", () => {
 
       console.log("E2E test completed successfully!");
     },
-    E2E_TIMEOUT
+    E2E_TIMEOUT,
   );
 });
 
@@ -179,16 +159,14 @@ describe("E2E: Mirror and Serve", () => {
 async function waitForServer(
   healthUrl: string,
   timeoutMs: number,
-  serverProcess: Subprocess
+  serverProcess: Subprocess,
 ): Promise<void> {
   const startTime = Date.now();
   while (Date.now() - startTime < timeoutMs) {
     // Check if server process died
     if (serverProcess.exitCode !== null) {
       const stderr = await new Response(serverProcess.stderr).text();
-      throw new Error(
-        `Server process exited with code ${serverProcess.exitCode}: ${stderr}`
-      );
+      throw new Error(`Server process exited with code ${serverProcess.exitCode}: ${stderr}`);
     }
 
     try {

@@ -58,7 +58,8 @@ export function registerMirrorCommand(program: Command): void {
           source: options.source,
         };
 
-        const sourceName = options.source ?? registry.sourceManager.getDefaultSourceName() ?? "default";
+        const sourceName =
+          options.source ?? registry.sourceManager.getDefaultSourceName() ?? "default";
         logger.info(`Mirroring packages from '${sourceName}'${options.full ? " (full)" : ""}`);
         if (!options.full) {
           logger.info(`Patterns: ${patternsToUse.join(", ")}`);

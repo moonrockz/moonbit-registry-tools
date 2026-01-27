@@ -168,12 +168,15 @@ function validateMirrorSource(value: unknown, index: number): MirrorSource {
     url: validateString(source.url, field("url"), true),
     index_url: validateString(source.index_url, field("index_url"), true),
     index_type:
-      source.index_type !== undefined ? validateIndexType(source.index_type, field("index_type")) : "git",
+      source.index_type !== undefined
+        ? validateIndexType(source.index_type, field("index_type"))
+        : "git",
     package_url_pattern:
       source.package_url_pattern !== undefined
         ? validateString(source.package_url_pattern, field("package_url_pattern"))
         : undefined,
-    enabled: source.enabled !== undefined ? validateBoolean(source.enabled, field("enabled")) : true,
+    enabled:
+      source.enabled !== undefined ? validateBoolean(source.enabled, field("enabled")) : true,
     auth: validateSourceAuth(source.auth, field("auth")),
     priority:
       source.priority !== undefined

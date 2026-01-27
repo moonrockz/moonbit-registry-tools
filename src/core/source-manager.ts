@@ -117,7 +117,7 @@ export class SourceManager {
           if (source.auth.token) {
             // Support environment variable references like ${VAR}
             const token = this.resolveEnvVar(source.auth.token);
-            headers["Authorization"] = `Bearer ${token}`;
+            headers.Authorization = `Bearer ${token}`;
           }
           break;
 
@@ -126,7 +126,7 @@ export class SourceManager {
             const username = this.resolveEnvVar(source.auth.username);
             const password = this.resolveEnvVar(source.auth.password);
             const credentials = Buffer.from(`${username}:${password}`).toString("base64");
-            headers["Authorization"] = `Basic ${credentials}`;
+            headers.Authorization = `Basic ${credentials}`;
           }
           break;
       }
