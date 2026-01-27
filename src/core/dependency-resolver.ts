@@ -22,7 +22,7 @@ export class DependencyResolver {
   /**
    * Resolve packages to mirror based on patterns and options
    */
-  async resolve(options: MirrorOptions): Promise<DependencyResolution> {
+  async resolve(options: MirrorOptions, sourceName?: string): Promise<DependencyResolution> {
     const result: DependencyResolution = {
       packages: new Set(),
       skipped: new Map(),
@@ -30,7 +30,7 @@ export class DependencyResolver {
     };
 
     // Get all packages matching patterns
-    const matchedPackages = await this.matchPatterns(options.patterns, options.full);
+    const matchedPackages = await this.matchPatterns(options.patterns, options.full, sourceName);
 
     for (const pkgName of matchedPackages) {
       result.packages.add(pkgName);
@@ -38,12 +38,12 @@ export class DependencyResolver {
 
     // If not strict mode, resolve transitive dependencies
     if (!options.strict) {
-      await this.resolveTransitiveDeps(result, options.patterns);
+      await this.resolveTransitiveDeps(result, options.patterns, sourceName);
     }
 
     // Check which packages are already cached
     for (const pkgName of result.packages) {
-      if (await this.isPackageCached(pkgName)) {
+      if (await this.isPackageCached(pkgName, sourceName)) {
         result.cached.add(pkgName);
       }
     }
@@ -52,15 +52,23 @@ export class DependencyResolver {
   }
 
   /** Match packages against glob patterns */
-  private async matchPatterns(patterns: string[], full: boolean): Promise<string[]> {
+  private async matchPatterns(
+    patterns: string[],
+    full: boolean,
+    sourceName?: string,
+  ): Promise<string[]> {
     if (full) {
-      return this.indexManager.listPackages();
+      return sourceName
+        ? this.indexManager.listPackagesFromSource(sourceName)
+        : this.indexManager.listPackages();
     }
 
     const matched = new Set<string>();
 
     for (const pattern of patterns) {
-      const packages = await this.indexManager.listPackagesMatching(pattern);
+      const packages = sourceName
+        ? await this.indexManager.listPackagesMatchingFromSource(pattern, sourceName)
+        : await this.indexManager.listPackagesMatching(pattern);
       for (const pkg of packages) {
         matched.add(pkg);
       }
@@ -73,6 +81,7 @@ export class DependencyResolver {
   private async resolveTransitiveDeps(
     result: DependencyResolution,
     originalPatterns: string[],
+    sourceName?: string,
   ): Promise<void> {
     const toProcess = new Set(result.packages);
     const processed = new Set<string>();
@@ -87,7 +96,9 @@ export class DependencyResolver {
       const pkgId = parsePackageId(pkgName);
       if (!pkgId) continue;
 
-      const metadata = await this.indexManager.getPackage(pkgId.username, pkgId.name);
+      const metadata = sourceName
+        ? await this.indexManager.getPackageFromSource(pkgId.username, pkgId.name, sourceName)
+        : await this.indexManager.getPackage(pkgId.username, pkgId.name);
       if (!metadata) continue;
 
       // Get deps from latest non-yanked version
@@ -125,11 +136,13 @@ export class DependencyResolver {
   }
 
   /** Check if any version of a package is cached */
-  private async isPackageCached(pkgName: string): Promise<boolean> {
+  private async isPackageCached(pkgName: string, sourceName?: string): Promise<boolean> {
     const pkgId = parsePackageId(pkgName);
     if (!pkgId) return false;
 
-    const metadata = await this.indexManager.getPackage(pkgId.username, pkgId.name);
+    const metadata = sourceName
+      ? await this.indexManager.getPackageFromSource(pkgId.username, pkgId.name, sourceName)
+      : await this.indexManager.getPackage(pkgId.username, pkgId.name);
     if (!metadata) return false;
 
     // Check if any version is cached

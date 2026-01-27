@@ -1,0 +1,69 @@
+title: MoonBit Registry Tools
+description: A CLI tool for managing MoonBit registries
+url: https://moonrockz.github.io
+baseurl: /moonbit-registry-tools
+
+remote_theme: just-the-docs/just-the-docs
+
+# Logo and favicon
+logo: "/assets/Moonrocks-plain-flag.png"
+favicon_ico: "/assets/favicon.ico"
+
+# Color scheme (light, dark, or custom)
+color_scheme: light
+
+# Enable search
+search_enabled: true
+search:
+  heading_level: 2
+  previews: 3
+  preview_words_before: 5
+  preview_words_after: 10
+  tokenizer_separator: /[\s/]+/
+  rel_url: true
+  button: false
+
+# Aux links (top right)
+aux_links:
+  "GitHub":
+    - "https://github.com/moonrockz/moonbit-registry-tools"
+
+aux_links_new_tab: true
+
+# Footer
+footer_content: "Copyright &copy; 2025 MoonRockz. Distributed under the <a href=\"https://github.com/moonrockz/moonbit-registry-tools/blob/main/LICENSE\">Apache License 2.0</a>."
+
+# Back to top link
+back_to_top: true
+back_to_top_text: "Back to top"
+
+# Last modified date
+last_edit_timestamp: true
+last_edit_time_format: "%b %e %Y at %I:%M %p"
+
+# GitHub edit link
+gh_edit_link: true
+gh_edit_link_text: "Edit this page on GitHub"
+gh_edit_repository: "https://github.com/moonrockz/moonbit-registry-tools"
+gh_edit_branch: "main"
+gh_edit_source: docs
+gh_edit_view_mode: "edit"
+
+# Collections for recipes
+collections:
+  recipes:
+    output: true
+    permalink: /recipes/:name/
+
+# Navigation structure
+nav_enabled: true
+
+# Plugins
+plugins:
+  - jekyll-seo-tag
+  - jekyll-github-metadata
+
+# Exclude from build
+exclude:
+  - node_modules/
+  - vendor/

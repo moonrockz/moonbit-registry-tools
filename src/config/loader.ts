@@ -71,11 +71,52 @@ function generateToml(config: RegistryConfig): string {
   lines.push(`data_dir = "${config.registry.data_dir}"`);
   lines.push("");
 
-  lines.push("[upstream]");
-  lines.push(`enabled = ${config.upstream.enabled}`);
-  lines.push(`url = "${config.upstream.url}"`);
-  lines.push(`index_url = "${config.upstream.index_url}"`);
-  lines.push("");
+  // Include upstream only if it exists (legacy format)
+  if (config.upstream && !config.sources?.length) {
+    lines.push("[upstream]");
+    lines.push(`enabled = ${config.upstream.enabled}`);
+    lines.push(`url = "${config.upstream.url}"`);
+    lines.push(`index_url = "${config.upstream.index_url}"`);
+    lines.push("");
+  }
+
+  // Include sources array (new format)
+  if (config.sources && config.sources.length > 0) {
+    for (const source of config.sources) {
+      lines.push("[[sources]]");
+      lines.push(`name = "${source.name}"`);
+      lines.push(`type = "${source.type}"`);
+      lines.push(`url = "${source.url}"`);
+      lines.push(`index_url = "${source.index_url}"`);
+      lines.push(`index_type = "${source.index_type}"`);
+      if (source.package_url_pattern) {
+        lines.push(`package_url_pattern = "${source.package_url_pattern}"`);
+      }
+      lines.push(`enabled = ${source.enabled}`);
+      if (source.priority !== undefined) {
+        lines.push(`priority = ${source.priority}`);
+      }
+      if (source.auth && source.auth.type !== "none") {
+        lines.push("[sources.auth]");
+        lines.push(`type = "${source.auth.type}"`);
+        if (source.auth.token) {
+          lines.push(`token = "${source.auth.token}"`);
+        }
+        if (source.auth.username) {
+          lines.push(`username = "${source.auth.username}"`);
+        }
+        if (source.auth.password) {
+          lines.push(`password = "${source.auth.password}"`);
+        }
+      }
+      lines.push("");
+    }
+
+    if (config.default_source) {
+      lines.push(`default_source = "${config.default_source}"`);
+      lines.push("");
+    }
+  }
 
   lines.push("[mirror]");
   lines.push(`auto_sync = ${config.mirror.auto_sync}`);

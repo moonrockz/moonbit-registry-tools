@@ -4,9 +4,18 @@ bun = "1.3.7"
 
 [tasks]
 build = { run = "bash .mise/tasks/build", description = "Build the CLI binary" }
-test = { run = "bash .mise/tasks/test", description = "Run tests" }
 dev = { run = "bash .mise/tasks/dev", description = "Run in development mode" }
 lint = { run = "bash .mise/tasks/lint", depends = ["yamllint"], description = "Lint code" }
 yamllint = { run = "bash .mise/tasks/yamllint", description = "Lint YAML files" }
 fmt = { run = "bash .mise/tasks/fmt", description = "Format code" }
 clean = { run = "bash .mise/tasks/clean", description = "Clean build artifacts" }
+
+[tasks.test]
+description = "Run tests"
+run = "bash .mise/tasks/test/_default"
+run_windows = "powershell -ExecutionPolicy Bypass -File .mise/tasks/test/_default.ps1"
+
+[tasks."test:e2e"]
+description = "Run E2E tests (requires moon CLI)"
+run = "bash .mise/tasks/test/e2e"
+run_windows = "powershell -ExecutionPolicy Bypass -File .mise/tasks/test/e2e.ps1"

@@ -2,6 +2,8 @@
  * Default configuration values
  */
 
+import type { MirrorSource } from "../core/types.ts";
+
 export { DEFAULT_CONFIG } from "../core/types.ts";
 
 /** Default config file name */
@@ -24,3 +26,25 @@ export const SERVER = {
   HOST: "0.0.0.0",
   PORT: 8080,
 } as const;
+
+/** Predefined source templates for easy setup */
+export const PREDEFINED_SOURCES: Record<string, Omit<MirrorSource, "name">> = {
+  mooncakes: {
+    type: "mooncakes",
+    url: "https://mooncakes.io",
+    index_url: "https://mooncakes.io/git/index",
+    index_type: "git",
+    package_url_pattern: "${url}/user/${username}/${name}/${version}.zip",
+    enabled: true,
+    priority: 100,
+  },
+  "moonbit-registry": {
+    type: "moonbit-registry",
+    url: "",
+    index_url: "",
+    index_type: "git",
+    package_url_pattern: "${url}/user/${username}/${name}/${version}.zip",
+    enabled: true,
+    priority: 50,
+  },
+};

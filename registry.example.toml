@@ -8,15 +8,47 @@ name = "my-company-registry"
 # Directory to store index and packages
 data_dir = "./data"
 
-[upstream]
-# Enable fetching from upstream mooncakes.io
-enabled = true
+# ============================================================================
+# OPTION 1: Legacy upstream config (simple single-source setup)
+# ============================================================================
+# [upstream]
+# enabled = true
+# url = "https://mooncakes.io"
+# index_url = "https://mooncakes.io/git/index"
 
-# Upstream registry URL for package downloads
+# ============================================================================
+# OPTION 2: Multiple sources config (recommended for advanced setups)
+# ============================================================================
+# Use [[sources]] array when you need to:
+# - Mirror from multiple registries
+# - Create a registry chain (mooncakes -> your-registry -> other-registry)
+# - Add authentication for private registries
+
+# Primary source: mooncakes.io (the official MoonBit registry)
+[[sources]]
+name = "mooncakes"
+type = "mooncakes"
 url = "https://mooncakes.io"
-
-# Git index URL for package metadata
 index_url = "https://mooncakes.io/git/index"
+index_type = "git"
+enabled = true
+priority = 100
+
+# Example: A partner's private registry (uncomment to use)
+# [[sources]]
+# name = "partner"
+# type = "moonbit-registry"
+# url = "https://partner.example.com/registry"
+# index_url = "https://partner.example.com/registry/git/index"
+# index_type = "git"
+# enabled = true
+# priority = 50
+# [sources.auth]
+# type = "bearer"
+# token = "${PARTNER_REGISTRY_TOKEN}"
+
+# Set the default source for mirroring
+default_source = "mooncakes"
 
 [mirror]
 # Automatically sync with upstream on a schedule

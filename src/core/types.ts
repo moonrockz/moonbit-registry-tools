@@ -26,17 +26,46 @@ export interface PackageMetadata {
   versions: PackageVersion[];
 }
 
+/** Source type for different registry implementations */
+export type SourceType = "mooncakes" | "moonbit-registry" | "custom";
+
+/** Authentication configuration for a source */
+export interface SourceAuth {
+  type: "none" | "bearer" | "basic";
+  token?: string;
+  username?: string;
+  password?: string;
+}
+
+/** Mirror source configuration */
+export interface MirrorSource {
+  name: string;
+  type: SourceType;
+  url: string;
+  index_url: string;
+  index_type: "git" | "http";
+  package_url_pattern?: string;
+  enabled: boolean;
+  auth?: SourceAuth;
+  priority?: number;
+}
+
 /** Registry configuration */
 export interface RegistryConfig {
   registry: {
     name: string;
     data_dir: string;
   };
-  upstream: {
+  /** @deprecated Use sources array instead */
+  upstream?: {
     enabled: boolean;
     url: string;
     index_url: string;
   };
+  /** Named mirror sources */
+  sources?: MirrorSource[];
+  /** Default source name for mirroring */
+  default_source?: string;
   mirror: {
     auto_sync: boolean;
     sync_interval: string;
@@ -88,6 +117,8 @@ export interface MirrorOptions {
   full: boolean;
   strict: boolean;
   quiet: boolean;
+  /** Name of source to mirror from (uses default if not specified) */
+  source?: string;
 }
 
 /** Result of dependency resolution */
