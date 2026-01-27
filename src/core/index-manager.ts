@@ -11,15 +11,18 @@ import { DATA_DIRS } from "../config/defaults.ts";
 import fs from "../utils/fs.ts";
 import git from "../utils/git.ts";
 import logger from "../utils/logger.ts";
-import type { PackageEntry, PackageMetadata, RegistryConfig } from "./types.ts";
+import type { SourceManager } from "./source-manager.ts";
+import type { MirrorSource, PackageEntry, PackageMetadata, RegistryConfig } from "./types.ts";
 import { parsePackageId } from "./types.ts";
 
 export class IndexManager {
   private indexDir: string;
   private config: RegistryConfig;
+  private sourceManager: SourceManager | null;
 
-  constructor(config: RegistryConfig) {
+  constructor(config: RegistryConfig, sourceManager?: SourceManager) {
     this.config = config;
+    this.sourceManager = sourceManager ?? null;
     this.indexDir = join(config.registry.data_dir, DATA_DIRS.INDEX);
   }
 
@@ -39,31 +42,153 @@ export class IndexManager {
     }
   }
 
-  /** Clone the upstream index */
+  /** Clone the upstream index (legacy method, uses default source) */
   async cloneUpstream(): Promise<void> {
-    if (existsSync(this.indexDir)) {
-      logger.debug("Index directory already exists, pulling updates");
-      await this.pullUpstream();
-      return;
-    }
-
-    const indexUrl = this.config.upstream.index_url;
-    logger.info(`Cloning upstream index from ${indexUrl}`);
-    await git.clone(indexUrl, this.indexDir, this.config.git.branch);
+    await this.syncSourceIndex();
   }
 
-  /** Pull updates from upstream */
+  /** Pull updates from upstream (legacy method, uses default source) */
   async pullUpstream(): Promise<void> {
-    if (!existsSync(this.indexDir)) {
-      await this.cloneUpstream();
+    await this.syncSourceIndex();
+  }
+
+  /** Get the path for a specific source's index */
+  getSourceIndexPath(sourceName?: string): string {
+    if (!sourceName) {
+      return this.indexDir;
+    }
+    return join(this.indexDir, "sources", sourceName);
+  }
+
+  /** Sync index from a specific source */
+  async syncSourceIndex(sourceName?: string): Promise<void> {
+    const source = this.getSourceForSync(sourceName);
+    const indexPath = sourceName ? this.getSourceIndexPath(sourceName) : this.indexDir;
+
+    if (source.index_type === "git") {
+      await this.syncGitIndex(source, indexPath);
+    } else {
+      await this.syncHttpIndex(source, indexPath);
+    }
+  }
+
+  /** Get source for sync operation */
+  private getSourceForSync(sourceName?: string): MirrorSource {
+    // Try to use SourceManager if available
+    if (this.sourceManager) {
+      const source = this.sourceManager.getSource(sourceName);
+      if (source) {
+        return source;
+      }
+      throw new Error(`Source '${sourceName ?? "default"}' not found`);
+    }
+
+    // Fall back to legacy upstream config
+    if (!this.config.upstream) {
+      throw new Error("No upstream configured");
+    }
+
+    return {
+      name: "upstream",
+      type: "mooncakes",
+      url: this.config.upstream.url,
+      index_url: this.config.upstream.index_url,
+      index_type: "git",
+      enabled: this.config.upstream.enabled,
+    };
+  }
+
+  /** Sync a git-based index */
+  private async syncGitIndex(source: MirrorSource, indexPath: string): Promise<void> {
+    if (existsSync(indexPath)) {
+      logger.debug(`Index directory for '${source.name}' exists, pulling updates`);
+      const result = await git.pull(indexPath);
+      if (!result.success) {
+        logger.warn(`Failed to pull updates for '${source.name}': ${result.stderr}`);
+      }
       return;
     }
 
-    logger.debug("Pulling upstream index updates");
-    const result = await git.pull(this.indexDir);
-    if (!result.success) {
-      logger.warn(`Failed to pull updates: ${result.stderr}`);
+    logger.info(`Cloning index from ${source.name} (${source.index_url})`);
+    await git.clone(source.index_url, indexPath, this.config.git.branch);
+  }
+
+  /** Sync an HTTP-based index (placeholder for future implementation) */
+  private async syncHttpIndex(source: MirrorSource, indexPath: string): Promise<void> {
+    // HTTP index sync would fetch package list from an API
+    // This is a placeholder for future implementation
+    logger.warn(`HTTP index sync for '${source.name}' is not yet implemented`);
+    await fs.ensureDir(indexPath);
+  }
+
+  /** Get package from a specific source's index */
+  async getPackageFromSource(
+    username: string,
+    packageName: string,
+    sourceName?: string,
+  ): Promise<PackageMetadata | null> {
+    const indexPath = this.getSourceIndexPath(sourceName);
+    const pkgIndexPath = join(indexPath, username, packageName);
+
+    if (!existsSync(pkgIndexPath)) {
+      return null;
     }
+
+    try {
+      const entries = await fs.readJsonl<PackageEntry>(pkgIndexPath);
+      return {
+        username,
+        name: packageName,
+        versions: entries.map((e) => ({
+          version: e.version,
+          checksum: e.checksum,
+          deps: e.deps,
+          yanked: e.yanked,
+        })),
+      };
+    } catch (err) {
+      logger.error(`Failed to read package index for ${username}/${packageName} from source: ${err}`);
+      return null;
+    }
+  }
+
+  /** List packages from a specific source's index */
+  async listPackagesFromSource(sourceName?: string): Promise<string[]> {
+    const indexPath = this.getSourceIndexPath(sourceName);
+    return this.listPackagesInDir(indexPath);
+  }
+
+  /** List packages matching a pattern from a specific source */
+  async listPackagesMatchingFromSource(pattern: string, sourceName?: string): Promise<string[]> {
+    const allPackages = await this.listPackagesFromSource(sourceName);
+    return allPackages.filter((pkg) => matchGlob(pkg, pattern));
+  }
+
+  /** List packages in a directory */
+  private async listPackagesInDir(dir: string): Promise<string[]> {
+    const packages: string[] = [];
+
+    if (!existsSync(dir)) {
+      return packages;
+    }
+
+    const users = await fs.listDir(dir);
+    for (const user of users) {
+      if (user.startsWith(".") || user === "sources") continue;
+
+      const userDir = join(dir, user);
+      if (!fs.isDirectory(userDir)) continue;
+
+      const pkgs = await fs.listDir(userDir);
+      for (const pkg of pkgs) {
+        const pkgPath = join(userDir, pkg);
+        if (fs.isFile(pkgPath)) {
+          packages.push(`${user}/${pkg}`);
+        }
+      }
+    }
+
+    return packages;
   }
 
   /** Get path to a package's index file */

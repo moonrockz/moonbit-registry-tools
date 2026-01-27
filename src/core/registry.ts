@@ -13,11 +13,13 @@ import logger from "../utils/logger.ts";
 import DependencyResolver from "./dependency-resolver.ts";
 import IndexManager from "./index-manager.ts";
 import PackageStore from "./package-store.ts";
-import type { MirrorOptions, PackageMetadata, RegistryConfig } from "./types.ts";
+import { SourceManager } from "./source-manager.ts";
+import type { MirrorOptions, MirrorSource, PackageMetadata, RegistryConfig } from "./types.ts";
 import { DEFAULT_CONFIG, formatPackageVersionId, parsePackageId } from "./types.ts";
 
 export class Registry {
   public config: RegistryConfig;
+  public sourceManager: SourceManager;
   public indexManager: IndexManager;
   public packageStore: PackageStore;
   public dependencyResolver: DependencyResolver;
@@ -26,8 +28,9 @@ export class Registry {
   constructor(config: RegistryConfig, rootDir: string) {
     this.config = config;
     this.rootDir = rootDir;
-    this.indexManager = new IndexManager(config);
-    this.packageStore = new PackageStore(config);
+    this.sourceManager = new SourceManager(config);
+    this.indexManager = new IndexManager(config, this.sourceManager);
+    this.packageStore = new PackageStore(config, this.sourceManager);
     this.dependencyResolver = new DependencyResolver(this.indexManager, this.packageStore);
   }
 
@@ -87,19 +90,25 @@ export class Registry {
     return registry;
   }
 
-  /** Mirror packages from upstream */
+  /** Mirror packages from upstream or specified source */
   async mirror(options: MirrorOptions): Promise<void> {
-    if (!this.config.upstream.enabled) {
-      throw new Error("Upstream is not enabled in configuration");
+    // Get the source to mirror from
+    const source = this.sourceManager.getSource(options.source);
+    if (!source) {
+      throw new Error(`Source '${options.source ?? "default"}' not found or not configured`);
     }
 
-    // First, ensure we have the upstream index
-    logger.info("Updating upstream index...");
-    await this.indexManager.cloneUpstream();
+    if (!source.enabled) {
+      throw new Error(`Source '${source.name}' is disabled`);
+    }
+
+    // First, ensure we have the source index
+    logger.info(`Updating index from source '${source.name}'...`);
+    await this.indexManager.syncSourceIndex(source.name);
 
     // Resolve packages to mirror
     logger.info("Resolving packages to mirror...");
-    const resolution = await this.dependencyResolver.resolve(options);
+    const resolution = await this.dependencyResolver.resolve(options, source.name);
 
     // Log warnings for skipped dependencies
     this.dependencyResolver.logSkippedWarnings(resolution, options.quiet);
@@ -118,7 +127,11 @@ export class Registry {
       const pkgId = parsePackageId(pkgName);
       if (!pkgId) continue;
 
-      const metadata = await this.indexManager.getPackage(pkgId.username, pkgId.name);
+      const metadata = await this.indexManager.getPackageFromSource(
+        pkgId.username,
+        pkgId.name,
+        source.name,
+      );
       if (!metadata) {
         logger.warn(`Package ${pkgName} not found in index`);
         failed++;
@@ -135,6 +148,7 @@ export class Registry {
             pkgId.name,
             version.version,
             version.checksum,
+            source.name,
           );
           downloaded++;
         } catch (err) {
@@ -187,6 +201,84 @@ export class Registry {
       cachedVersions: cached.length,
       cacheSize,
     };
+  }
+
+  /** List all configured sources */
+  listSources(): MirrorSource[] {
+    return this.sourceManager.listSources();
+  }
+
+  /** Add a new source to configuration */
+  addSource(source: MirrorSource): void {
+    // Initialize sources array if needed
+    if (!this.config.sources) {
+      this.config.sources = [];
+    }
+
+    // Check for duplicates
+    const existing = this.config.sources.find((s) => s.name === source.name);
+    if (existing) {
+      throw new Error(`Source '${source.name}' already exists`);
+    }
+
+    this.config.sources.push(source);
+
+    // Reinitialize source manager with updated config
+    this.sourceManager = new SourceManager(this.config);
+  }
+
+  /** Remove a source from configuration */
+  removeSource(name: string): void {
+    if (!this.config.sources) {
+      throw new Error(`Source '${name}' not found`);
+    }
+
+    const index = this.config.sources.findIndex((s) => s.name === name);
+    if (index === -1) {
+      throw new Error(`Source '${name}' not found`);
+    }
+
+    this.config.sources.splice(index, 1);
+
+    // Clear default if it was the removed source
+    if (this.config.default_source === name) {
+      this.config.default_source = undefined;
+    }
+
+    // Reinitialize source manager with updated config
+    this.sourceManager = new SourceManager(this.config);
+  }
+
+  /** Set the default source */
+  setDefaultSource(name: string): void {
+    const source = this.sourceManager.getSource(name);
+    if (!source) {
+      throw new Error(`Source '${name}' not found`);
+    }
+    this.config.default_source = name;
+  }
+
+  /** Enable or disable a source */
+  setSourceEnabled(name: string, enabled: boolean): void {
+    if (!this.config.sources) {
+      throw new Error(`Source '${name}' not found`);
+    }
+
+    const source = this.config.sources.find((s) => s.name === name);
+    if (!source) {
+      throw new Error(`Source '${name}' not found`);
+    }
+
+    source.enabled = enabled;
+
+    // Reinitialize source manager with updated config
+    this.sourceManager = new SourceManager(this.config);
+  }
+
+  /** Save configuration to file */
+  async saveConfig(): Promise<void> {
+    const configPath = join(this.rootDir, CONFIG_FILE_NAME);
+    await configLoader.save(this.config, configPath);
   }
 }
 

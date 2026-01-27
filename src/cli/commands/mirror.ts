@@ -13,16 +13,18 @@ interface MirrorCommandOptions {
   strict?: boolean;
   quiet?: boolean;
   dir?: string;
+  source?: string;
 }
 
 export function registerMirrorCommand(program: Command): void {
   program
     .command("mirror [patterns...]")
-    .description("Mirror packages from upstream registry")
+    .description("Mirror packages from a registry source")
     .option("--full", "Mirror entire registry")
     .option("--strict", "Only mirror exact pattern matches (no dependency resolution)")
     .option("-q, --quiet", "Suppress warnings about skipped dependencies")
     .option("-d, --dir <path>", "Registry directory (default: current directory)")
+    .option("-s, --source <name>", "Source to mirror from (uses default if not specified)")
     .action(async (patterns: string[], options: MirrorCommandOptions) => {
       try {
         if (options.quiet) {
@@ -53,9 +55,11 @@ export function registerMirrorCommand(program: Command): void {
           full: options.full ?? false,
           strict: options.strict ?? false,
           quiet: options.quiet ?? false,
+          source: options.source,
         };
 
-        logger.info(`Mirroring packages${options.full ? " (full)" : ""}`);
+        const sourceName = options.source ?? registry.sourceManager.getDefaultSourceName() ?? "default";
+        logger.info(`Mirroring packages from '${sourceName}'${options.full ? " (full)" : ""}`);
         if (!options.full) {
           logger.info(`Patterns: ${patternsToUse.join(", ")}`);
         }

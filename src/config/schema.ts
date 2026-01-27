@@ -2,7 +2,7 @@
  * Configuration schema and validation
  */
 
-import type { RegistryConfig } from "../core/types.ts";
+import type { MirrorSource, RegistryConfig, SourceAuth, SourceType } from "../core/types.ts";
 import { DEFAULT_CONFIG } from "../core/types.ts";
 
 /** Validation error */
@@ -105,6 +105,91 @@ function deepMerge<T extends Record<string, unknown>>(target: T, source: Partial
   return result;
 }
 
+/** Validate source type */
+function validateSourceType(value: unknown, field: string): SourceType {
+  const valid: SourceType[] = ["mooncakes", "moonbit-registry", "custom"];
+  if (!valid.includes(value as SourceType)) {
+    throw new ConfigValidationError(`Must be one of: ${valid.join(", ")}`, field);
+  }
+  return value as SourceType;
+}
+
+/** Validate index type */
+function validateIndexType(value: unknown, field: string): "git" | "http" {
+  if (value !== "git" && value !== "http") {
+    throw new ConfigValidationError("Must be 'git' or 'http'", field);
+  }
+  return value;
+}
+
+/** Validate source auth configuration */
+function validateSourceAuth(value: unknown, field: string): SourceAuth | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value !== "object") {
+    throw new ConfigValidationError("Must be an object", field);
+  }
+
+  const auth = value as Record<string, unknown>;
+  const authType = auth.type;
+
+  if (authType !== "none" && authType !== "bearer" && authType !== "basic") {
+    throw new ConfigValidationError("auth.type must be 'none', 'bearer', or 'basic'", field);
+  }
+
+  return {
+    type: authType,
+    token: auth.token !== undefined ? validateString(auth.token, `${field}.token`) : undefined,
+    username:
+      auth.username !== undefined ? validateString(auth.username, `${field}.username`) : undefined,
+    password:
+      auth.password !== undefined ? validateString(auth.password, `${field}.password`) : undefined,
+  };
+}
+
+/** Validate a single mirror source */
+function validateMirrorSource(value: unknown, index: number): MirrorSource {
+  if (!value || typeof value !== "object") {
+    throw new ConfigValidationError("Must be an object", `sources[${index}]`);
+  }
+
+  const source = value as Record<string, unknown>;
+  const field = (name: string) => `sources[${index}].${name}`;
+
+  const name = validateString(source.name, field("name"), true);
+  if (!name) {
+    throw new ConfigValidationError("Source name cannot be empty", field("name"));
+  }
+
+  return {
+    name,
+    type: source.type !== undefined ? validateSourceType(source.type, field("type")) : "custom",
+    url: validateString(source.url, field("url"), true),
+    index_url: validateString(source.index_url, field("index_url"), true),
+    index_type:
+      source.index_type !== undefined ? validateIndexType(source.index_type, field("index_type")) : "git",
+    package_url_pattern:
+      source.package_url_pattern !== undefined
+        ? validateString(source.package_url_pattern, field("package_url_pattern"))
+        : undefined,
+    enabled: source.enabled !== undefined ? validateBoolean(source.enabled, field("enabled")) : true,
+    auth: validateSourceAuth(source.auth, field("auth")),
+    priority:
+      source.priority !== undefined
+        ? validateNumber(source.priority, field("priority"), 0, 1000)
+        : undefined,
+  };
+}
+
+/** Validate an array of mirror sources */
+function validateSourcesArray(value: unknown, field: string): MirrorSource[] {
+  if (!Array.isArray(value)) {
+    throw new ConfigValidationError("Must be an array", field);
+  }
+  return value.map((item, i) => validateMirrorSource(item, i));
+}
+
 /** Validate and normalize a registry configuration */
 export function validateConfig(raw: unknown): RegistryConfig {
   if (!raw || typeof raw !== "object") {
@@ -127,9 +212,17 @@ export function validateConfig(raw: unknown): RegistryConfig {
     }
   }
 
-  // Validate upstream section
+  // Validate upstream section (legacy, deprecated)
   if (config.upstream && typeof config.upstream === "object") {
     const upstream = config.upstream as Record<string, unknown>;
+    // Initialize upstream if not present (it's optional now)
+    if (!result.upstream) {
+      result.upstream = {
+        enabled: true,
+        url: "",
+        index_url: "",
+      };
+    }
     if (upstream.enabled !== undefined) {
       result.upstream.enabled = validateBoolean(upstream.enabled, "upstream.enabled");
     }
@@ -139,6 +232,16 @@ export function validateConfig(raw: unknown): RegistryConfig {
     if (upstream.index_url !== undefined) {
       result.upstream.index_url = validateString(upstream.index_url, "upstream.index_url");
     }
+  }
+
+  // Validate sources array (new format)
+  if (config.sources !== undefined) {
+    result.sources = validateSourcesArray(config.sources, "sources");
+  }
+
+  // Validate default_source
+  if (config.default_source !== undefined) {
+    result.default_source = validateString(config.default_source, "default_source");
   }
 
   // Validate mirror section

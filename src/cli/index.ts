@@ -8,6 +8,7 @@ import { registerConfigCommand } from "./commands/config.ts";
 import { registerInitCommand } from "./commands/init.ts";
 import { registerMirrorCommand } from "./commands/mirror.ts";
 import { registerServeCommand } from "./commands/serve.ts";
+import { registerSourceCommand } from "./commands/source.ts";
 import { registerSyncCommand } from "./commands/sync.ts";
 
 export function createCli(): Command {
@@ -34,6 +35,7 @@ export function createCli(): Command {
   registerMirrorCommand(program);
   registerServeCommand(program);
   registerConfigCommand(program);
+  registerSourceCommand(program);
   registerSyncCommand(program);
 
   return program;
