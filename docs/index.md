@@ -11,6 +11,50 @@ permalink: /
 A CLI tool for managing MoonBit registries, including local registry setup, mirroring from mooncakes.io, and serving as a registry server.
 {: .fs-6 .fw-300 }
 
+<style>
+  .hero {
+    display: flex;
+    gap: 2rem;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.5rem;
+    margin: 1.5rem 0 1rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 16px;
+    background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+  }
+  .hero__title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin: 0 0 0.25rem;
+  }
+  .hero__subtitle {
+    margin: 0;
+    color: #475569;
+  }
+  .hero__media img {
+    width: 160px;
+    max-width: 100%;
+    height: auto;
+  }
+  @media (max-width: 768px) {
+    .hero {
+      flex-direction: column;
+      text-align: center;
+    }
+  }
+</style>
+
+<div class="hero">
+  <div class="hero__text">
+    <p class="hero__title">Moonrockz Registry Tools</p>
+    <p class="hero__subtitle">Fast, local-first MoonBit package registry tooling for teams.</p>
+  </div>
+  <div class="hero__media">
+    <img src="{{ site.baseurl }}/assets/Moonrocks-plain-flag.png" alt="Moonrockz logo" />
+  </div>
+</div>
+
 [Get Started]({{ site.baseurl }}/getting-started){: .btn .btn-primary .fs-5 .mb-4 .mb-md-0 .mr-2 }
 [View on GitHub](https://github.com/moonrockz/moonbit-registry-tools){: .btn .fs-5 .mb-4 .mb-md-0 }
 

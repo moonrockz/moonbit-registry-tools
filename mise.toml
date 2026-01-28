@@ -1,6 +1,7 @@
 [tools]
 bun = "1.3.7"
 "aqua:astral-sh/uv" = "latest"
+ruby = "3.3.6"
 
 [tasks]
 build = { run = "bash .mise/tasks/build", description = "Build the CLI binary" }
@@ -9,6 +10,17 @@ lint = { run = "bash .mise/tasks/lint", depends = ["yamllint"], description = "L
 yamllint = { run = "bash .mise/tasks/yamllint", description = "Lint YAML files" }
 fmt = { run = "bash .mise/tasks/fmt", description = "Format code" }
 clean = { run = "bash .mise/tasks/clean", description = "Clean build artifacts" }
+docs = { run = "bash .mise/tasks/docs", description = "Serve docs site locally", run_windows = "powershell -ExecutionPolicy Bypass -File .mise/tasks/docs.ps1" }
+docs_build = { run = "bash .mise/tasks/docs-build", description = "Build docs site locally", run_windows = "powershell -ExecutionPolicy Bypass -File .mise/tasks/docs-build.ps1" }
+[tasks."docs:docker"]
+run = "bash .mise/tasks/docs-docker"
+run_windows = "powershell -ExecutionPolicy Bypass -File .mise/tasks/docs-docker.ps1"
+description = "Serve docs site locally via Docker"
+
+[tasks."docs:wsl"]
+run = "bash .mise/tasks/docs-wsl"
+run_windows = "powershell -ExecutionPolicy Bypass -File .mise/tasks/docs-wsl.ps1"
+description = "Serve docs site locally via WSL"
 
 [tasks.test]
 description = "Run tests"

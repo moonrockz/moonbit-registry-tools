@@ -50,7 +50,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .moonbit-registry
-          key: moonbit-packages-${{ hashFiles('moon.mod.json') }}
+          key: moonbit-packages-{% raw %}{{ hashFiles('moon.mod.json') }}{% endraw %}
           restore-keys: |
             moonbit-packages-
 

@@ -31,6 +31,7 @@ describe("CLI Commands", () => {
       expect(result).toContain("serve");
       expect(result).toContain("config");
       expect(result).toContain("sync");
+      expect(result).toContain("update");
     });
   });
 
@@ -94,6 +95,38 @@ describe("CLI Commands", () => {
 
       const configContent = await readFile(join(registryDir, "registry.toml"), "utf-8");
       expect(configContent).toContain("port = 9000");
+    });
+  });
+
+  describe("moonbit-registry update", () => {
+    it("should show help for update command", async () => {
+      const result = await $`bun ${cliPath} update --help`.text();
+
+      expect(result).toContain("Update local moon package index");
+      expect(result).toContain("--registry");
+    });
+
+    it("should error when no registry URL and no config", async () => {
+      const result = await $`bun ${cliPath} update -d ${tempDir}`.quiet().nothrow();
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr.toString()).toContain("No registry URL specified");
+    });
+
+    it("should use base_url from registry config", async () => {
+      const registryDir = join(tempDir, "update-test");
+      await $`bun ${cliPath} init ${registryDir}`.quiet();
+      await $`bun ${cliPath} config server.base_url http://localhost:9999 -d ${registryDir}`.quiet();
+
+      // This will fail because server isn't running, but we can check the URL was picked up
+      const result = await $`bun ${cliPath} update -d ${registryDir}`.quiet().nothrow();
+
+      // Either moon is not installed or server not running - both are expected
+      const output = result.stdout.toString() + result.stderr.toString();
+      expect(
+        output.includes("http://localhost:9999") ||
+          output.includes("moon CLI not found")
+      ).toBe(true);
     });
   });
 });

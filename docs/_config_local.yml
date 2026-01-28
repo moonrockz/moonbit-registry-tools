@@ -1,0 +1,12 @@
+# Local-only overrides for dev server
+# Keep this file out of the Pages build or GitHub Actions if not needed.
+
+remote_theme: false
+theme: just-the-docs
+
+sass:
+  quiet_deps: true
+  silence_deprecations:
+    - import
+    - global-builtin
+    - color-functions

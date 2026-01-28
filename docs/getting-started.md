@@ -65,14 +65,23 @@ You should see output like:
 
 ## Step 4: Configure MoonBit
 
-In a new terminal, configure the `moon` CLI to use your local registry:
+In a new terminal, update moon's package index to use your local registry:
 
+```bash
+# From your registry directory
+moonbit-registry update
+
+# Or specify the registry URL explicitly
+moonbit-registry update --registry http://localhost:8080
+```
+
+This runs `moon update` with your private registry configured.
+
+{: .tip }
+For permanent configuration, set the environment variable in your shell profile:
 ```bash
 export MOONCAKES_REGISTRY=http://localhost:8080
 ```
-
-{: .tip }
-Add this to your shell profile (`.bashrc`, `.zshrc`, etc.) to make it permanent.
 
 ## Step 5: Use Your Registry
 
