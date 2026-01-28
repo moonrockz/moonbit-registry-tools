@@ -120,16 +120,19 @@ moonbit-registry serve --port 3000
 moonbit-registry serve --host 0.0.0.0 --port 8080
 ```
 
-### Update Moon to Use Local Registry
+### Update Moon's Package Index
 
-The easiest way to configure moon to use your local registry is with the `update` command:
+The `update` command runs `moon update` with a specific registry configured:
 
 ```bash
-# Update moon's package index from your local registry
+# Update from your local registry (uses server.base_url from config)
 moonbit-registry update
 
-# Or specify a different registry URL
+# Update from a specific registry URL
 moonbit-registry update --registry http://localhost:8080
+
+# Update from the official mooncakes.io registry
+moonbit-registry update --mooncakes
 ```
 
 This runs `moon update` with the `MOONCAKES_REGISTRY` environment variable set to your private registry URL.

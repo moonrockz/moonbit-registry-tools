@@ -78,6 +78,12 @@ moonbit-registry update --registry http://localhost:8080
 This runs `moon update` with your private registry configured.
 
 {: .tip }
+To switch back to the official mooncakes.io registry:
+```bash
+moonbit-registry update --mooncakes
+```
+
+{: .note }
 For permanent configuration, set the environment variable in your shell profile:
 ```bash
 export MOONCAKES_REGISTRY=http://localhost:8080

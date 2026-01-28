@@ -104,6 +104,7 @@ describe("CLI Commands", () => {
 
       expect(result).toContain("Update local moon package index");
       expect(result).toContain("--registry");
+      expect(result).toContain("--mooncakes");
     });
 
     it("should error when no registry URL and no config", async () => {
@@ -125,6 +126,16 @@ describe("CLI Commands", () => {
       const output = result.stdout.toString() + result.stderr.toString();
       expect(
         output.includes("http://localhost:9999") || output.includes("moon CLI not found"),
+      ).toBe(true);
+    });
+
+    it("should use mooncakes.io when --mooncakes flag is set", async () => {
+      const result = await $`bun ${cliPath} update --mooncakes`.quiet().nothrow();
+
+      // Either succeeds or fails (if moon not installed), but should use mooncakes.io URL
+      const output = result.stdout.toString() + result.stderr.toString();
+      expect(
+        output.includes("https://mooncakes.io") || output.includes("moon CLI not found"),
       ).toBe(true);
     });
   });
