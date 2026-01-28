@@ -2,7 +2,13 @@
  * Configuration schema and validation
  */
 
-import type { MirrorSource, RegistryConfig, SourceAuth, SourceType } from "../core/types.ts";
+import type {
+  MirrorSource,
+  RegistryConfig,
+  SmartHttpConfig,
+  SourceAuth,
+  SourceType,
+} from "../core/types.ts";
 import { DEFAULT_CONFIG } from "../core/types.ts";
 
 /** Validation error */
@@ -193,6 +199,26 @@ function validateSourcesArray(value: unknown, field: string): MirrorSource[] {
   return value.map((item, i) => validateMirrorSource(item, i));
 }
 
+/** Validate smart HTTP configuration */
+function validateSmartHttpConfig(value: unknown, field: string): SmartHttpConfig | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value !== "object") {
+    throw new ConfigValidationError("Must be an object", field);
+  }
+
+  const config = value as Record<string, unknown>;
+  return {
+    enabled:
+      config.enabled !== undefined ? validateBoolean(config.enabled, `${field}.enabled`) : false,
+    git_http_backend_path:
+      config.git_http_backend_path !== undefined
+        ? validateString(config.git_http_backend_path, `${field}.git_http_backend_path`)
+        : undefined,
+  };
+}
+
 /** Validate and normalize a registry configuration */
 export function validateConfig(raw: unknown): RegistryConfig {
   if (!raw || typeof raw !== "object") {
@@ -272,6 +298,9 @@ export function validateConfig(raw: unknown): RegistryConfig {
     }
     if (server.base_url !== undefined) {
       result.server.base_url = validateString(server.base_url, "server.base_url");
+    }
+    if (server.smart_http !== undefined) {
+      result.server.smart_http = validateSmartHttpConfig(server.smart_http, "server.smart_http");
     }
   }
 

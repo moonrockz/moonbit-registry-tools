@@ -1,17 +1,34 @@
 /**
- * Git index endpoint handlers (Dumb HTTP protocol)
+ * Git index endpoint handlers (Dumb HTTP and Smart HTTP protocol)
  *
- * Serves the git index as static files for dumb HTTP clients.
+ * Serves the git index as static files for dumb HTTP clients,
+ * and delegates to git-http-backend for Smart HTTP (git-upload-pack).
  */
 
 import { existsSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { Registry } from "../../core/registry.ts";
+import type { SmartHttpConfig } from "../../core/types.ts";
 import logger from "../../utils/logger.ts";
+import { type SmartHttpHandlers, createSmartHttpHandlers } from "./smart-http.ts";
 
-export function createGitRoutes(registry: Registry) {
+/** Options for creating git routes */
+export interface GitRoutesOptions {
+  smartHttp?: SmartHttpConfig;
+}
+
+export function createGitRoutes(registry: Registry, options: GitRoutesOptions = {}) {
   const indexDir = registry.indexManager.path;
+
+  // Initialize Smart HTTP handlers if configured
+  let smartHttpHandlers: SmartHttpHandlers | null = null;
+  if (options.smartHttp) {
+    smartHttpHandlers = createSmartHttpHandlers({
+      config: options.smartHttp,
+      indexDir,
+    });
+  }
 
   /** Handle git info/refs request */
   async function handleInfoRefs(request: Request): Promise<Response> {
@@ -19,7 +36,11 @@ export function createGitRoutes(registry: Registry) {
     const service = url.searchParams.get("service");
 
     if (service) {
-      // Smart HTTP request - not supported yet
+      // Smart HTTP request
+      if (smartHttpHandlers?.available) {
+        return smartHttpHandlers.handleInfoRefs(request, service);
+      }
+      // Smart HTTP not available
       return new Response("Smart HTTP not implemented", { status: 501 });
     }
 
@@ -101,6 +122,14 @@ export function createGitRoutes(registry: Registry) {
       return new Response("MoonBit Registry Git Index\n", {
         headers: { "Content-Type": "text/plain" },
       });
+    }
+
+    // Smart HTTP: git-upload-pack POST
+    if (gitPath === "git-upload-pack" && request.method === "POST") {
+      if (smartHttpHandlers?.available) {
+        return smartHttpHandlers.handleUploadPack(request);
+      }
+      return new Response("Smart HTTP not implemented", { status: 501 });
     }
 
     // Route based on path
