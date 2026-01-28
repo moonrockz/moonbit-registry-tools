@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-01-27
+
 ### Added
 
 - Initial release of MoonBit Registry CLI tool
@@ -32,4 +34,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Changelog in keepachangelog format with release notes automation
 - Expanded README with getting started scenarios and configuration examples
 
-[Unreleased]: https://github.com/moonrockz/moonbit-registry-tools/commits/main
+[Unreleased]: https://github.com/moonrockz/moonbit-registry-tools/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/moonrockz/moonbit-registry-tools/releases/tag/v0.1.0
