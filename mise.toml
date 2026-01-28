@@ -6,9 +6,9 @@ ruby = "3.3.6"
 [tasks]
 build = { run = "bash .mise/tasks/build", description = "Build the CLI binary" }
 dev = { run = "bash .mise/tasks/dev", description = "Run in development mode" }
-lint = { run = "bash .mise/tasks/lint", depends = ["yamllint"], description = "Lint code" }
-yamllint = { run = "bash .mise/tasks/yamllint", description = "Lint YAML files" }
-fmt = { run = "bash .mise/tasks/fmt", description = "Format code" }
+lint = { run = "bash .mise/tasks/lint", run_windows = "powershell -ExecutionPolicy Bypass -File .mise/tasks/lint.ps1", depends = ["yamllint"], description = "Lint code" }
+yamllint = { run = "bash .mise/tasks/yamllint", run_windows = "powershell -ExecutionPolicy Bypass -File .mise/tasks/yamllint.ps1", description = "Lint YAML files" }
+fmt = { run = "bash .mise/tasks/fmt", run_windows = "powershell -ExecutionPolicy Bypass -File .mise/tasks/fmt.ps1", description = "Format code" }
 clean = { run = "bash .mise/tasks/clean", description = "Clean build artifacts" }
 docs = { run = "bash .mise/tasks/docs", description = "Serve docs site locally", run_windows = "powershell -ExecutionPolicy Bypass -File .mise/tasks/docs.ps1" }
 docs_build = { run = "bash .mise/tasks/docs-build", description = "Build docs site locally", run_windows = "powershell -ExecutionPolicy Bypass -File .mise/tasks/docs-build.ps1" }

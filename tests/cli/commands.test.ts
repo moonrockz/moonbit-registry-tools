@@ -124,8 +124,7 @@ describe("CLI Commands", () => {
       // Either moon is not installed or server not running - both are expected
       const output = result.stdout.toString() + result.stderr.toString();
       expect(
-        output.includes("http://localhost:9999") ||
-          output.includes("moon CLI not found")
+        output.includes("http://localhost:9999") || output.includes("moon CLI not found"),
       ).toBe(true);
     });
   });

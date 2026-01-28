@@ -68,3 +68,4 @@ plugins:
 exclude:
   - node_modules/
   - vendor/
+  - _config_local.yml

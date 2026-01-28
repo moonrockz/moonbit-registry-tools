@@ -2,10 +2,10 @@
  * update command - Update local moon package index from private registry
  */
 
-import type { Command } from "commander";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { $ } from "bun";
+import type { Command } from "commander";
 import { CONFIG_FILE_NAME } from "../../config/defaults.ts";
 import { Registry } from "../../core/registry.ts";
 import logger from "../../utils/logger.ts";
@@ -20,14 +20,8 @@ export function registerUpdateCommand(program: Command): void {
   program
     .command("update")
     .description("Update local moon package index from private registry")
-    .option(
-      "-r, --registry <url>",
-      "Registry URL (default: uses server.base_url from config)"
-    )
-    .option(
-      "-d, --dir <path>",
-      "Registry directory (default: current directory)"
-    )
+    .option("-r, --registry <url>", "Registry URL (default: uses server.base_url from config)")
+    .option("-d, --dir <path>", "Registry directory (default: current directory)")
     .action(async (options: UpdateCommandOptions) => {
       try {
         // Determine registry URL

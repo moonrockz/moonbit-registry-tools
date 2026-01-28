@@ -4,6 +4,4 @@
 
 set -e
 
-args="check"
-[ "${usage_fix:-false}" = "true" ] && args="$args --write"
-bun x biome $args .
+bun scripts/lint.ts -- "$@"

@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import net from "node:net";
 import { join } from "node:path";
-import { existsSync } from "node:fs";
 
 const repoRoot = process.cwd();
 const docsDir = join(repoRoot, "docs");
@@ -115,12 +115,7 @@ if (existsSync(join(docsDir, "_config_local.yml"))) {
   configFiles.push("_config_local.yml");
 }
 
-const dockerArgs = [
-  "run",
-  "--rm",
-  "-p",
-  `${hostPort}:4000`,
-];
+const dockerArgs = ["run", "--rm", "-p", `${hostPort}:4000`];
 
 if (enableLivereload && chosenLivereloadPort !== 0) {
   dockerArgs.push("-p", `${chosenLivereloadPort}:${chosenLivereloadPort}`);

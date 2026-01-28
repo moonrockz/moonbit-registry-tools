@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
-import { join } from "node:path";
-import net from "node:net";
 import { existsSync } from "node:fs";
+import net from "node:net";
+import { join } from "node:path";
 
 const repoRoot = process.cwd();
 const docsDir = join(repoRoot, "docs");
@@ -37,10 +37,7 @@ function resolveWindowsToolchainEnv(): NodeJS.ProcessEnv {
   const candidates: string[] = [];
   const msys2Root = process.env.MSYS2_ROOT;
   if (msys2Root) {
-    candidates.push(
-      join(msys2Root, "ucrt64", "bin"),
-      join(msys2Root, "mingw64", "bin"),
-    );
+    candidates.push(join(msys2Root, "ucrt64", "bin"), join(msys2Root, "mingw64", "bin"));
   }
 
   candidates.push("C:\\msys64\\ucrt64\\bin", "C:\\msys64\\mingw64\\bin");
@@ -60,8 +57,7 @@ function resolveWindowsToolchainEnv(): NodeJS.ProcessEnv {
   }
 
   const existingCflags = process.env.CFLAGS ?? "";
-  const extraCflags =
-    "-Wno-incompatible-pointer-types -Wno-error=incompatible-pointer-types";
+  const extraCflags = "-Wno-incompatible-pointer-types -Wno-error=incompatible-pointer-types";
   const nextCflags = existingCflags.includes(extraCflags)
     ? existingCflags
     : `${existingCflags} ${extraCflags}`.trim();
@@ -87,7 +83,10 @@ async function configureWindowsBundle(): Promise<void> {
   const cflags = "-Wno-incompatible-pointer-types -Wno-error=incompatible-pointer-types";
   const gems = ["bigdecimal", "http_parser.rb", "json", "eventmachine", "wdm"];
   for (const gem of gems) {
-    await runBundle(["config", "set", "--local", `build.${gem}`, `--with-cflags=${cflags}`], docsDir);
+    await runBundle(
+      ["config", "set", "--local", `build.${gem}`, `--with-cflags=${cflags}`],
+      docsDir,
+    );
   }
 }
 
@@ -189,14 +188,7 @@ if (existsSync(join(docsDir, "_config_local.yml"))) {
   configFiles.push("_config_local.yml");
 }
 
-const serveArgs = [
-  "exec",
-  "jekyll",
-  "serve",
-  "--incremental",
-  "--config",
-  configFiles.join(","),
-];
+const serveArgs = ["exec", "jekyll", "serve", "--incremental", "--config", configFiles.join(",")];
 
 if (!hasBaseUrlFlag) {
   serveArgs.push("--baseurl", baseUrl);

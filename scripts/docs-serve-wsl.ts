@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import net from "node:net";
 import { join } from "node:path";
-import { existsSync } from "node:fs";
 
 const repoRoot = process.cwd();
 const docsDir = join(repoRoot, "docs");
@@ -118,11 +118,9 @@ if (!hasLivereloadPortFlag && chosenLivereloadPort === 0) {
 }
 
 const portArg = chosenPort === 0 ? "" : ` --port ${chosenPort}`;
-const baseUrlArg =
-  hasBaseUrlFlag || baseUrl.length === 0 ? "" : ` --baseurl ${baseUrl}`;
+const baseUrlArg = hasBaseUrlFlag || baseUrl.length === 0 ? "" : ` --baseurl ${baseUrl}`;
 const extra = extraArgs.length > 0 ? ` ${extraArgs.join(" ")}` : "";
-const livereloadArg =
-  enableLivereload && !hasLivereloadFlag ? " --livereload" : "";
+const livereloadArg = enableLivereload && !hasLivereloadFlag ? " --livereload" : "";
 const livereloadPortArg =
   enableLivereload && !hasLivereloadPortFlag && chosenLivereloadPort !== 0
     ? ` --livereload-port ${chosenLivereloadPort}`

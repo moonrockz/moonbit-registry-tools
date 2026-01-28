@@ -3,4 +3,4 @@
 
 set -e
 
-bun x biome format --write .
+bun scripts/format.ts -- "$@"
