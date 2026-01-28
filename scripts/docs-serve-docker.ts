@@ -94,6 +94,8 @@ const hasPortFlag = extraArgs.includes("--port") || extraArgs.includes("-P");
 const hasLivereloadFlag = extraArgs.includes("--livereload");
 const hasLivereloadPortFlag = extraArgs.includes("--livereload-port");
 const baseUrl = process.env.DOCS_BASEURL ?? "";
+const wantsIncremental =
+  extraArgs.includes("--incremental") || process.env.DOCS_INCREMENTAL === "true";
 
 const desiredPort = parsePort(extraArgs) ?? 4000;
 const chosenPort = hasPortFlag ? desiredPort : await findAvailablePort(desiredPort);
@@ -129,7 +131,6 @@ dockerArgs.push(
   "jekyll/jekyll:4.4",
   "jekyll",
   "serve",
-  "--incremental",
   "--host",
   "0.0.0.0",
   "--config",
@@ -148,6 +149,10 @@ if (enableLivereload && !hasLivereloadFlag) {
 
 if (enableLivereload && !hasLivereloadPortFlag && chosenLivereloadPort !== 0) {
   dockerArgs.push("--livereload-port", String(chosenLivereloadPort));
+}
+
+if (wantsIncremental && !extraArgs.includes("--incremental")) {
+  dockerArgs.push("--incremental");
 }
 
 if (chosenPort === 0) {

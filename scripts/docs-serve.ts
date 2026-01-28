@@ -161,6 +161,8 @@ const hasPortFlag = extraArgs.includes("--port") || extraArgs.includes("-P");
 const hasLivereloadFlag = extraArgs.includes("--livereload");
 const hasLivereloadPortFlag = extraArgs.includes("--livereload-port");
 const baseUrl = process.env.DOCS_BASEURL ?? "";
+const wantsIncremental =
+  extraArgs.includes("--incremental") || process.env.DOCS_INCREMENTAL === "true";
 
 const desiredPort = parsePort(extraArgs) ?? 4000;
 const chosenPort = hasPortFlag ? desiredPort : await findAvailablePort(desiredPort);
@@ -188,7 +190,7 @@ if (existsSync(join(docsDir, "_config_local.yml"))) {
   configFiles.push("_config_local.yml");
 }
 
-const serveArgs = ["exec", "jekyll", "serve", "--incremental", "--config", configFiles.join(",")];
+const serveArgs = ["exec", "jekyll", "serve", "--config", configFiles.join(",")];
 
 if (!hasBaseUrlFlag) {
   serveArgs.push("--baseurl", baseUrl);
@@ -200,6 +202,10 @@ if (enableLivereload && !hasLivereloadFlag) {
 
 if (enableLivereload && !hasLivereloadPortFlag && chosenLivereloadPort !== 0) {
   serveArgs.push("--livereload-port", String(chosenLivereloadPort));
+}
+
+if (wantsIncremental && !extraArgs.includes("--incremental")) {
+  serveArgs.push("--incremental");
 }
 
 if (!hasPortFlag) {

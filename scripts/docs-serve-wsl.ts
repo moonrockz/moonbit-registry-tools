@@ -102,6 +102,8 @@ const hasPortFlag = extraArgs.includes("--port") || extraArgs.includes("-P");
 const hasLivereloadFlag = extraArgs.includes("--livereload");
 const hasLivereloadPortFlag = extraArgs.includes("--livereload-port");
 const baseUrl = process.env.DOCS_BASEURL ?? "";
+const wantsIncremental =
+  extraArgs.includes("--incremental") || process.env.DOCS_INCREMENTAL === "true";
 
 const desiredPort = parsePort(extraArgs) ?? 4000;
 const chosenPort = hasPortFlag ? desiredPort : await findAvailablePort(desiredPort);
@@ -125,6 +127,7 @@ const livereloadPortArg =
   enableLivereload && !hasLivereloadPortFlag && chosenLivereloadPort !== 0
     ? ` --livereload-port ${chosenLivereloadPort}`
     : "";
+const incrementalArg = wantsIncremental && !extraArgs.includes("--incremental") ? " --incremental" : "";
 
 const wslDocsDir = toWslPath(docsDir);
 const defaultPath =
@@ -146,7 +149,7 @@ const command = [
   `cd ${wslDocsDir}`,
   "bundle config set --local path vendor/bundle",
   "bundle install",
-  `bundle exec jekyll serve${livereloadArg}${livereloadPortArg} --incremental${configArg}${baseUrlArg}${portArg}${extra}`,
+  `bundle exec jekyll serve${livereloadArg}${livereloadPortArg}${incrementalArg}${configArg}${baseUrlArg}${portArg}${extra}`,
 ].join("\n");
 
 if (chosenPort === 0) {

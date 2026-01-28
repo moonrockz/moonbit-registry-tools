@@ -247,3 +247,6 @@ docs/vendor/
 docs/_site/
 docs/.jekyll-cache/
 docs/.sass-cache/
+
+# Test artifacts
+test-results/
