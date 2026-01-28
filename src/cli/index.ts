@@ -10,6 +10,7 @@ import { registerMirrorCommand } from "./commands/mirror.ts";
 import { registerServeCommand } from "./commands/serve.ts";
 import { registerSourceCommand } from "./commands/source.ts";
 import { registerSyncCommand } from "./commands/sync.ts";
+import { registerUpdateCommand } from "./commands/update.ts";
 
 export function createCli(): Command {
   const program = new Command();
@@ -37,6 +38,7 @@ export function createCli(): Command {
   registerConfigCommand(program);
   registerSourceCommand(program);
   registerSyncCommand(program);
+  registerUpdateCommand(program);
 
   return program;
 }

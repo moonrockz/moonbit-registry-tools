@@ -14,12 +14,35 @@ The MoonBit registry (mooncakes.io) is the official package registry for the Moo
 
 ## Installation
 
-### Prerequisites
+### Using Mise (Recommended)
 
-- [Bun](https://bun.sh) runtime (v1.0 or later)
-- Git
+If you have [mise](https://mise.jdx.dev) installed:
+
+```bash
+mise use -g "github:moonrockz/moonbit-registry-tools@latest"
+```
+
+**Windows ARM64 users:** Run the x64 binary via emulation:
+
+```bash
+MISE_ARCH=x64 mise use -g "github:moonrockz/moonbit-registry-tools@latest"
+```
+
+### Download Pre-built Binaries
+
+Download from [GitHub Releases](https://github.com/moonrockz/moonbit-registry-tools/releases):
+
+| Platform | Download |
+|----------|----------|
+| Linux x64 | [moonbit-registry-linux-x64.tar.gz](https://github.com/moonrockz/moonbit-registry-tools/releases/latest/download/moonbit-registry-linux-x64.tar.gz) |
+| Linux ARM64 | [moonbit-registry-linux-arm64.tar.gz](https://github.com/moonrockz/moonbit-registry-tools/releases/latest/download/moonbit-registry-linux-arm64.tar.gz) |
+| macOS Intel | [moonbit-registry-darwin-x64.tar.gz](https://github.com/moonrockz/moonbit-registry-tools/releases/latest/download/moonbit-registry-darwin-x64.tar.gz) |
+| macOS Apple Silicon | [moonbit-registry-darwin-arm64.tar.gz](https://github.com/moonrockz/moonbit-registry-tools/releases/latest/download/moonbit-registry-darwin-arm64.tar.gz) |
+| Windows x64 | [moonbit-registry-windows-x64.zip](https://github.com/moonrockz/moonbit-registry-tools/releases/latest/download/moonbit-registry-windows-x64.zip) |
 
 ### From Source
+
+Prerequisites: [Bun](https://bun.sh) (v1.0+) and Git
 
 ```bash
 git clone https://github.com/moonrockz/moonbit-registry-tools.git
@@ -97,7 +120,26 @@ moonbit-registry serve --port 3000
 moonbit-registry serve --host 0.0.0.0 --port 8080
 ```
 
-### Configure MoonBit to Use Local Registry
+### Update Moon's Package Index
+
+The `update` command runs `moon update` with a specific registry configured:
+
+```bash
+# Update from your local registry (uses server.base_url from config)
+moonbit-registry update
+
+# Update from a specific registry URL
+moonbit-registry update --registry http://localhost:8080
+
+# Update from the official mooncakes.io registry
+moonbit-registry update --mooncakes
+```
+
+This runs `moon update` with the `MOONCAKES_REGISTRY` environment variable set to your private registry URL.
+
+#### Manual Configuration
+
+Alternatively, set the environment variable directly:
 
 ```bash
 # Set the registry URL for moon

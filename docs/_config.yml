@@ -60,6 +60,7 @@ nav_enabled: true
 
 # Plugins
 plugins:
+  - jekyll-remote-theme
   - jekyll-seo-tag
   - jekyll-github-metadata
 
@@ -67,3 +68,4 @@ plugins:
 exclude:
   - node_modules/
   - vendor/
+  - _config_local.yml

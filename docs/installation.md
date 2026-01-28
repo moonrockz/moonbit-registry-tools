@@ -11,9 +11,53 @@ There are several ways to install MoonBit Registry Tools depending on your platf
 
 ---
 
+## Install with Mise (Recommended)
+
+If you have [mise](https://mise.jdx.dev) installed, you can install the CLI directly from GitHub releases:
+
+```bash
+mise use -g "github:moonrockz/moonbit-registry-tools@latest"
+```
+
+This installs the latest version globally. To install a specific version:
+
+```bash
+mise use -g "github:moonrockz/moonbit-registry-tools@0.1.0"
+```
+
+To add it to a project's `.mise.toml`:
+
+```bash
+mise use "github:moonrockz/moonbit-registry-tools@0.1.0"
+```
+
+### Windows ARM64 Users
+
+Windows ARM64 does not have a native binary, but you can run the x64 version via emulation. Set the `MISE_ARCH` environment variable:
+
+```bash
+MISE_ARCH=x64 mise use -g "github:moonrockz/moonbit-registry-tools@latest"
+```
+
+To make this permanent, add to your shell profile or mise configuration:
+
+```bash
+# In ~/.bashrc or ~/.zshrc
+export MISE_ARCH=x64
+```
+
+Or configure in `~/.config/mise/config.toml`:
+
+```toml
+[env]
+MISE_ARCH = "x64"
+```
+
+---
+
 ## Download Pre-built Binaries
 
-The easiest way to install is to download a pre-built binary from the [GitHub Releases](https://github.com/moonrockz/moonbit-registry-tools/releases) page.
+Alternatively, download a pre-built binary from the [GitHub Releases](https://github.com/moonrockz/moonbit-registry-tools/releases) page.
 
 ### Linux (x64)
 
