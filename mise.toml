@@ -12,6 +12,10 @@ fmt = { run = "bash .mise/tasks/fmt", run_windows = "powershell -ExecutionPolicy
 clean = { run = "bash .mise/tasks/clean", description = "Clean build artifacts" }
 docs = { run = "bash .mise/tasks/docs", description = "Serve docs site locally", run_windows = "powershell -ExecutionPolicy Bypass -File .mise/tasks/docs.ps1" }
 docs_build = { run = "bash .mise/tasks/docs-build", description = "Build docs site locally", run_windows = "powershell -ExecutionPolicy Bypass -File .mise/tasks/docs-build.ps1" }
+[tasks."fmt:check"]
+run = "bash .mise/tasks/fmt-check"
+run_windows = "powershell -ExecutionPolicy Bypass -File .mise/tasks/fmt-check.ps1"
+description = "Check formatting"
 [tasks."docs:docker"]
 run = "bash .mise/tasks/docs-docker"
 run_windows = "powershell -ExecutionPolicy Bypass -File .mise/tasks/docs-docker.ps1"
