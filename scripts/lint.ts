@@ -1,11 +1,11 @@
 import { spawn } from "node:child_process";
 
 function run(cmd: string, args: string[]): Promise<void> {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolvePromise, reject) => {
     const child = spawn(cmd, args, { stdio: "inherit" });
     child.on("close", (code) => {
       if (code === 0) {
-        resolve();
+        resolvePromise();
         return;
       }
       reject(new Error(`${cmd} exited with code ${code ?? "unknown"}`));
@@ -15,13 +15,11 @@ function run(cmd: string, args: string[]): Promise<void> {
 }
 
 const extraArgs = process.argv.slice(2);
-const wantsFix = extraArgs.includes("--fix");
-const filteredArgs = extraArgs.filter((arg) => arg !== "--fix");
-
 const lintArgs = ["x", "biome", "check"];
-if (wantsFix) {
+if (extraArgs.includes("--fix")) {
   lintArgs.push("--fix", "--unsafe");
 }
+const filteredArgs = extraArgs.filter((arg) => arg !== "--fix");
 lintArgs.push(".");
 lintArgs.push(...filteredArgs);
 

@@ -127,7 +127,8 @@ const livereloadPortArg =
   enableLivereload && !hasLivereloadPortFlag && chosenLivereloadPort !== 0
     ? ` --livereload-port ${chosenLivereloadPort}`
     : "";
-const incrementalArg = wantsIncremental && !extraArgs.includes("--incremental") ? " --incremental" : "";
+const incrementalArg =
+  wantsIncremental && !extraArgs.includes("--incremental") ? " --incremental" : "";
 
 const wslDocsDir = toWslPath(docsDir);
 const defaultPath =

@@ -33,6 +33,14 @@
     }
   },
   "files": {
-    "ignore": ["node_modules", "dist", "*.json", "docs/vendor", "docs/.bundle", "docs/_site"]
+    "ignore": [
+      "node_modules",
+      "dist",
+      "*.json",
+      "docs/vendor",
+      "docs/.bundle",
+      "docs/_site",
+      ".tmp"
+    ]
   }
 }

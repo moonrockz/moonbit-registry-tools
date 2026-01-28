@@ -134,9 +134,9 @@ describe("CLI Commands", () => {
 
       // Either succeeds or fails (if moon not installed), but should use mooncakes.io URL
       const output = result.stdout.toString() + result.stderr.toString();
-      expect(
-        output.includes("https://mooncakes.io") || output.includes("moon CLI not found"),
-      ).toBe(true);
+      expect(output.includes("https://mooncakes.io") || output.includes("moon CLI not found")).toBe(
+        true,
+      );
     });
   });
 });
