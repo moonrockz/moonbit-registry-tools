@@ -105,7 +105,7 @@ export class DependencyResolver {
       const latestVersion = this.getLatestVersion(metadata);
       if (!latestVersion) continue;
 
-      for (const depName of Object.keys(latestVersion.deps)) {
+      for (const depName of Object.keys(latestVersion.deps || {})) {
         if (result.packages.has(depName)) continue;
 
         // Check if dep matches original patterns
