@@ -31,7 +31,7 @@ export class SourceManager {
         url: config.upstream.url,
         index_url: config.upstream.index_url,
         index_type: "git",
-        package_url_pattern: "${url}/user/${username}/${name}/${version}.zip",
+        package_url_pattern: "https://download.mooncakes.io/user/${username}/${name}/${version}.zip",
         enabled: config.upstream.enabled,
         priority: 0,
       };
@@ -96,7 +96,7 @@ export class SourceManager {
 
   /** Build package download URL for a source */
   buildPackageUrl(source: MirrorSource, username: string, name: string, version: string): string {
-    const pattern = source.package_url_pattern ?? "${url}/user/${username}/${name}/${version}.zip";
+    const pattern = source.package_url_pattern ?? "https://download.mooncakes.io/user/${username}/${name}/${version}.zip";
 
     return pattern
       .replace(/\$\{url\}/g, source.url)

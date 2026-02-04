@@ -159,7 +159,7 @@ export class PackageStore {
       url: this.config.upstream.url,
       index_url: this.config.upstream.index_url,
       index_type: "git",
-      package_url_pattern: "${url}/user/${username}/${name}/${version}.zip",
+      package_url_pattern: "https://download.mooncakes.io/user/${username}/${name}/${version}.zip",
       enabled: this.config.upstream.enabled,
     };
   }
@@ -176,7 +176,7 @@ export class PackageStore {
     }
 
     // Fall back to default pattern
-    const pattern = source.package_url_pattern ?? "${url}/user/${username}/${name}/${version}.zip";
+    const pattern = source.package_url_pattern ?? "https://download.mooncakes.io/user/${username}/${name}/${version}.zip";
     return pattern
       .replace(/\$\{url\}/g, source.url)
       .replace(/\$\{username\}/g, username)

@@ -34,7 +34,7 @@ export const PREDEFINED_SOURCES: Record<string, Omit<MirrorSource, "name">> = {
     url: "https://mooncakes.io",
     index_url: "https://mooncakes.io/git/index",
     index_type: "git",
-    package_url_pattern: "${url}/user/${username}/${name}/${version}.zip",
+    package_url_pattern: "https://download.mooncakes.io/user/${username}/${name}/${version}.zip",
     enabled: true,
     priority: 100,
   },
