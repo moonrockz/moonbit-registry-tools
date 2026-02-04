@@ -1,0 +1,307 @@
+name: 'MoonBit Registry Tools'
+description: 'Create and manage MoonBit package registries and mirrors'
+author: 'moonrockz'
+branding:
+  icon: 'package'
+  color: 'purple'
+
+inputs:
+  command:
+    description: 'Command to run (init, mirror, sync, serve, config)'
+    required: true
+
+  # Common options
+  registry-dir:
+    description: 'Path to registry directory'
+    required: false
+    default: '.moonbit-registry'
+
+  verbose:
+    description: 'Enable verbose logging'
+    required: false
+    default: 'false'
+
+  # Init options
+  registry-name:
+    description: 'Name for the registry (used with init command)'
+    required: false
+
+  # Mirror options
+  patterns:
+    description: 'Package patterns to mirror (space-separated, e.g., "moonbitlang/* company/pkg")'
+    required: false
+
+  full:
+    description: 'Mirror entire registry (used with mirror command)'
+    required: false
+    default: 'false'
+
+  strict:
+    description: 'Only exact pattern matches, no dependency resolution'
+    required: false
+    default: 'false'
+
+  source:
+    description: 'Specific source to mirror from'
+    required: false
+
+  # Sync options
+  sync-mode:
+    description: 'Sync mode: push, pull, or both'
+    required: false
+    default: 'pull'
+
+  # Serve options
+  port:
+    description: 'Port for registry server'
+    required: false
+    default: '8080'
+
+  host:
+    description: 'Host binding for registry server'
+    required: false
+    default: '0.0.0.0'
+
+  background:
+    description: 'Run server in background'
+    required: false
+    default: 'false'
+
+  # Source management
+  source-name:
+    description: 'Source name (for source add/remove commands)'
+    required: false
+
+  source-url:
+    description: 'Source URL (for source add command)'
+    required: false
+
+  source-preset:
+    description: 'Use predefined source preset (mooncakes)'
+    required: false
+
+  # Config options
+  config-key:
+    description: 'Configuration key to get/set'
+    required: false
+
+  config-value:
+    description: 'Configuration value to set'
+    required: false
+
+  # Installation
+  version:
+    description: 'Version of moonbit-registry to use (default: latest)'
+    required: false
+    default: 'latest'
+
+outputs:
+  registry-url:
+    description: 'URL of the registry server (when using serve command)'
+    value: ${{ steps.serve.outputs.url }}
+
+  registry-dir:
+    description: 'Path to the registry directory'
+    value: ${{ steps.setup.outputs.registry-dir }}
+
+  packages-mirrored:
+    description: 'Number of packages mirrored (when using mirror command)'
+    value: ${{ steps.mirror.outputs.count }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup registry directory
+      id: setup
+      shell: bash
+      run: |
+        echo "registry-dir=${{ inputs.registry-dir }}" >> $GITHUB_OUTPUT
+        mkdir -p "${{ inputs.registry-dir }}"
+
+    - name: Download moonbit-registry
+      shell: bash
+      run: |
+        # Determine platform
+        case "${{ runner.os }}" in
+          Linux)
+            if [ "${{ runner.arch }}" = "ARM64" ]; then
+              PLATFORM="linux-arm64"
+            else
+              PLATFORM="linux-x64"
+            fi
+            EXT="tar.gz"
+            ;;
+          macOS)
+            if [ "${{ runner.arch }}" = "ARM64" ]; then
+              PLATFORM="darwin-arm64"
+            else
+              PLATFORM="darwin-x64"
+            fi
+            EXT="tar.gz"
+            ;;
+          Windows)
+            PLATFORM="windows-x64"
+            EXT="zip"
+            ;;
+        esac
+
+        # Get version
+        VERSION="${{ inputs.version }}"
+        if [ "$VERSION" = "latest" ]; then
+          VERSION=$(curl -s https://api.github.com/repos/moonrockz/moonbit-registry-tools/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+        fi
+
+        # Download and extract
+        DOWNLOAD_URL="https://github.com/moonrockz/moonbit-registry-tools/releases/download/${VERSION}/moonbit-registry-${PLATFORM}.${EXT}"
+        echo "Downloading moonbit-registry ${VERSION} for ${PLATFORM}..."
+
+        mkdir -p "${{ runner.temp }}/moonbit-registry"
+        cd "${{ runner.temp }}/moonbit-registry"
+
+        if [ "$EXT" = "tar.gz" ]; then
+          curl -sL "$DOWNLOAD_URL" | tar -xz
+        else
+          curl -sL "$DOWNLOAD_URL" -o moonbit-registry.zip
+          unzip -q moonbit-registry.zip
+        fi
+
+        # Make executable and add to path
+        chmod +x moonbit-registry* 2>/dev/null || true
+        echo "${{ runner.temp }}/moonbit-registry" >> $GITHUB_PATH
+
+    - name: Run init command
+      if: inputs.command == 'init'
+      shell: bash
+      run: |
+        ARGS="${{ inputs.registry-dir }}"
+        if [ -n "${{ inputs.registry-name }}" ]; then
+          ARGS="$ARGS --name ${{ inputs.registry-name }}"
+        fi
+        if [ "${{ inputs.verbose }}" = "true" ]; then
+          ARGS="-v $ARGS"
+        fi
+        moonbit-registry init $ARGS
+
+    - name: Run mirror command
+      id: mirror
+      if: inputs.command == 'mirror'
+      shell: bash
+      run: |
+        ARGS=""
+        if [ "${{ inputs.verbose }}" = "true" ]; then
+          ARGS="-v"
+        fi
+        ARGS="$ARGS -d ${{ inputs.registry-dir }}"
+
+        if [ "${{ inputs.full }}" = "true" ]; then
+          ARGS="$ARGS --full"
+        fi
+        if [ "${{ inputs.strict }}" = "true" ]; then
+          ARGS="$ARGS --strict"
+        fi
+        if [ -n "${{ inputs.source }}" ]; then
+          ARGS="$ARGS --source ${{ inputs.source }}"
+        fi
+
+        # Add patterns
+        PATTERNS="${{ inputs.patterns }}"
+
+        moonbit-registry mirror $ARGS $PATTERNS 2>&1 | tee mirror_output.txt
+
+        # Extract count from output if available
+        COUNT=$(grep -oP 'Mirrored \K\d+' mirror_output.txt 2>/dev/null || echo "0")
+        echo "count=$COUNT" >> $GITHUB_OUTPUT
+
+    - name: Run sync command
+      if: inputs.command == 'sync'
+      shell: bash
+      run: |
+        ARGS=""
+        if [ "${{ inputs.verbose }}" = "true" ]; then
+          ARGS="-v"
+        fi
+        ARGS="$ARGS -d ${{ inputs.registry-dir }}"
+
+        case "${{ inputs.sync-mode }}" in
+          push)
+            ARGS="$ARGS --push"
+            ;;
+          pull)
+            ARGS="$ARGS --pull"
+            ;;
+          both)
+            ARGS="$ARGS --pull --push"
+            ;;
+        esac
+
+        moonbit-registry sync $ARGS
+
+    - name: Run serve command
+      id: serve
+      if: inputs.command == 'serve'
+      shell: bash
+      run: |
+        ARGS=""
+        if [ "${{ inputs.verbose }}" = "true" ]; then
+          ARGS="-v"
+        fi
+        ARGS="$ARGS -d ${{ inputs.registry-dir }}"
+        ARGS="$ARGS --port ${{ inputs.port }}"
+        ARGS="$ARGS --host ${{ inputs.host }}"
+
+        URL="http://${{ inputs.host }}:${{ inputs.port }}"
+        echo "url=$URL" >> $GITHUB_OUTPUT
+
+        if [ "${{ inputs.background }}" = "true" ]; then
+          nohup moonbit-registry serve $ARGS > registry-server.log 2>&1 &
+          echo "Server started in background (PID: $!)"
+          # Wait for server to be ready
+          for i in {1..30}; do
+            if curl -s "http://localhost:${{ inputs.port }}/health" > /dev/null 2>&1; then
+              echo "Server is ready"
+              break
+            fi
+            sleep 1
+          done
+        else
+          moonbit-registry serve $ARGS
+        fi
+
+    - name: Run source add command
+      if: inputs.command == 'source-add'
+      shell: bash
+      run: |
+        ARGS=""
+        if [ "${{ inputs.verbose }}" = "true" ]; then
+          ARGS="-v"
+        fi
+        ARGS="$ARGS -d ${{ inputs.registry-dir }}"
+
+        SOURCE_ARGS="${{ inputs.source-name }}"
+        if [ -n "${{ inputs.source-preset }}" ]; then
+          SOURCE_ARGS="$SOURCE_ARGS --from-preset ${{ inputs.source-preset }}"
+        elif [ -n "${{ inputs.source-url }}" ]; then
+          SOURCE_ARGS="$SOURCE_ARGS --url ${{ inputs.source-url }}"
+        fi
+
+        moonbit-registry $ARGS source add $SOURCE_ARGS
+
+    - name: Run config command
+      if: inputs.command == 'config'
+      shell: bash
+      run: |
+        ARGS=""
+        if [ "${{ inputs.verbose }}" = "true" ]; then
+          ARGS="-v"
+        fi
+        ARGS="$ARGS -d ${{ inputs.registry-dir }}"
+
+        if [ -n "${{ inputs.config-key }}" ]; then
+          if [ -n "${{ inputs.config-value }}" ]; then
+            moonbit-registry $ARGS config "${{ inputs.config-key }}" "${{ inputs.config-value }}"
+          else
+            moonbit-registry $ARGS config "${{ inputs.config-key }}"
+          fi
+        else
+          moonbit-registry $ARGS config
+        fi

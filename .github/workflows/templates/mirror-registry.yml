@@ -1,0 +1,151 @@
+# MoonBit Registry Mirror Template
+#
+# This workflow creates and maintains a mirror of the MoonCakes registry.
+# Copy this file to your repository's .github/workflows/ directory.
+#
+# Features:
+# - Daily automatic sync from upstream
+# - Manual trigger support
+# - Deploys to GitHub Pages
+# - Maintains git history of package index
+#
+# Setup:
+# 1. Enable GitHub Pages in repository settings (deploy from GitHub Actions)
+# 2. Optionally create a registry-index branch for the package index
+# 3. Configure the PACKAGES_TO_MIRROR variable below
+
+name: Mirror Registry
+
+on:
+  schedule:
+    # Sync daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      full_sync:
+        description: 'Mirror entire registry (not just specified packages)'
+        type: boolean
+        default: false
+      packages:
+        description: 'Additional package patterns to mirror (space-separated)'
+        type: string
+        required: false
+
+# Only allow one sync at a time
+concurrency:
+  group: mirror-sync
+  cancel-in-progress: false
+
+# Configure which packages to mirror
+env:
+  # Space-separated list of package patterns
+  # Examples: "moonbitlang/*" "company/specific-pkg" "author/lib-*"
+  PACKAGES_TO_MIRROR: "moonbitlang/*"
+
+  # Registry directory name
+  REGISTRY_DIR: ".registry"
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout registry index branch
+        continue-on-error: true
+        run: |
+          if git ls-remote --heads origin registry-index | grep -q registry-index; then
+            git worktree add ${{ env.REGISTRY_DIR }} registry-index
+          fi
+
+      - name: Initialize registry
+        uses: moonrockz/moonbit-registry-tools@main
+        with:
+          command: init
+          registry-dir: ${{ env.REGISTRY_DIR }}
+          registry-name: my-mirror
+
+      - name: Add mooncakes source
+        uses: moonrockz/moonbit-registry-tools@main
+        with:
+          command: source-add
+          registry-dir: ${{ env.REGISTRY_DIR }}
+          source-name: mooncakes
+          source-preset: mooncakes
+
+      - name: Mirror packages
+        uses: moonrockz/moonbit-registry-tools@main
+        with:
+          command: mirror
+          registry-dir: ${{ env.REGISTRY_DIR }}
+          patterns: ${{ env.PACKAGES_TO_MIRROR }} ${{ github.event.inputs.packages }}
+          full: ${{ github.event.inputs.full_sync || 'false' }}
+          verbose: true
+
+      - name: Generate stats
+        run: |
+          cd ${{ env.REGISTRY_DIR }}
+
+          # Count packages and owners
+          TOTAL_PACKAGES=$(find data/index -name "*.jsonl" 2>/dev/null | wc -l || echo "0")
+          TOTAL_OWNERS=$(find data/index -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l || echo "0")
+
+          # Create stats.json
+          cat > stats.json << EOF
+          {
+            "totalPackages": $TOTAL_PACKAGES,
+            "totalOwners": $TOTAL_OWNERS,
+            "yankedCount": 0,
+            "lastSync": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+            "lastSyncPackages": 0,
+            "lastSyncOwners": 0
+          }
+          EOF
+
+      - name: Commit index changes
+        run: |
+          cd ${{ env.REGISTRY_DIR }}
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update registry index - $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+            git push origin registry-index
+          fi
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Create pages site
+        run: |
+          mkdir -p _site
+
+          # Copy stats
+          cp ${{ env.REGISTRY_DIR }}/stats.json _site/ 2>/dev/null || true
+
+          # Create git index for dumb HTTP protocol
+          git clone --bare ${{ env.REGISTRY_DIR }} _site/git/index
+          cd _site/git/index
+          git update-server-info
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4

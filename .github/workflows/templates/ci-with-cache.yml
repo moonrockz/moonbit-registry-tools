@@ -1,0 +1,90 @@
+# MoonBit CI with Registry Cache Template
+#
+# This workflow provides fast MoonBit CI builds by caching packages locally.
+# The first run mirrors required packages; subsequent runs use the cache.
+#
+# Copy this file to your repository's .github/workflows/ directory.
+#
+# Features:
+# - Caches mirrored packages between runs
+# - Automatic dependency resolution
+# - Runs local registry server during build
+# - Supports custom package patterns
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY_DIR: .moonbit-cache
+  REGISTRY_PORT: 8080
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MoonBit
+        uses: chawyehsu/setup-moonup@v1
+
+      - name: Cache registry
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.REGISTRY_DIR }}
+          key: moonbit-registry-${{ hashFiles('moon.mod.json') }}
+          restore-keys: |
+            moonbit-registry-
+
+      - name: Initialize registry
+        uses: moonrockz/moonbit-registry-tools@main
+        with:
+          command: init
+          registry-dir: ${{ env.REGISTRY_DIR }}
+
+      - name: Add mooncakes source
+        uses: moonrockz/moonbit-registry-tools@main
+        with:
+          command: source-add
+          registry-dir: ${{ env.REGISTRY_DIR }}
+          source-name: mooncakes
+          source-preset: mooncakes
+
+      - name: Mirror dependencies
+        uses: moonrockz/moonbit-registry-tools@main
+        with:
+          command: mirror
+          registry-dir: ${{ env.REGISTRY_DIR }}
+          # Mirror all packages your project depends on
+          # The tool automatically resolves transitive dependencies
+          patterns: "moonbitlang/core"
+
+      - name: Start registry server
+        uses: moonrockz/moonbit-registry-tools@main
+        with:
+          command: serve
+          registry-dir: ${{ env.REGISTRY_DIR }}
+          port: ${{ env.REGISTRY_PORT }}
+          background: 'true'
+
+      - name: Build project
+        env:
+          MOONCAKES_REGISTRY: http://localhost:${{ env.REGISTRY_PORT }}
+        run: |
+          moon update
+          moon build --target all
+
+      - name: Run tests
+        env:
+          MOONCAKES_REGISTRY: http://localhost:${{ env.REGISTRY_PORT }}
+        run: |
+          moon test
+
+      - name: Check formatting
+        run: moon fmt --check

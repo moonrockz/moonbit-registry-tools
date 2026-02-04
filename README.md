@@ -408,6 +408,152 @@ jobs:
         run: moon build
 ```
 
+## GitHub Actions
+
+Use moonbit-registry-tools directly in your GitHub Actions workflows.
+
+### Quick Start
+
+```yaml
+- name: Initialize registry
+  uses: moonrockz/moonbit-registry-tools@main
+  with:
+    command: init
+    registry-dir: .moonbit-registry
+
+- name: Mirror packages
+  uses: moonrockz/moonbit-registry-tools@main
+  with:
+    command: mirror
+    registry-dir: .moonbit-registry
+    patterns: "moonbitlang/core moonbitlang/x"
+
+- name: Start registry server
+  uses: moonrockz/moonbit-registry-tools@main
+  with:
+    command: serve
+    registry-dir: .moonbit-registry
+    port: '8080'
+    background: 'true'
+```
+
+### Available Commands
+
+| Command | Description |
+|---------|-------------|
+| `init` | Initialize a new registry |
+| `mirror` | Mirror packages from upstream |
+| `sync` | Sync index with remote git |
+| `serve` | Start the registry server |
+| `source-add` | Add a mirror source |
+| `config` | View or modify configuration |
+
+### Action Inputs
+
+#### Common Inputs
+
+| Input | Description | Default |
+|-------|-------------|---------|
+| `command` | Command to run (required) | - |
+| `registry-dir` | Path to registry directory | `.moonbit-registry` |
+| `verbose` | Enable verbose logging | `false` |
+| `version` | Tool version to use | `latest` |
+
+#### Mirror Command Inputs
+
+| Input | Description | Default |
+|-------|-------------|---------|
+| `patterns` | Package patterns (space-separated) | - |
+| `full` | Mirror entire registry | `false` |
+| `strict` | Exact matches only (no deps) | `false` |
+| `source` | Specific source to mirror from | - |
+
+#### Serve Command Inputs
+
+| Input | Description | Default |
+|-------|-------------|---------|
+| `port` | Server port | `8080` |
+| `host` | Server host | `0.0.0.0` |
+| `background` | Run in background | `false` |
+
+#### Sync Command Inputs
+
+| Input | Description | Default |
+|-------|-------------|---------|
+| `sync-mode` | Mode: `push`, `pull`, or `both` | `pull` |
+
+### Action Outputs
+
+| Output | Description |
+|--------|-------------|
+| `registry-url` | URL of the registry server (serve command) |
+| `registry-dir` | Path to the registry directory |
+| `packages-mirrored` | Number of packages mirrored |
+
+### Workflow Templates
+
+We provide ready-to-use workflow templates in [`.github/workflows/templates/`](.github/workflows/templates/):
+
+| Template | Description |
+|----------|-------------|
+| [`mirror-registry.yml`](.github/workflows/templates/mirror-registry.yml) | Create a public mirror deployed to GitHub Pages |
+| [`ci-with-cache.yml`](.github/workflows/templates/ci-with-cache.yml) | CI workflow with package caching |
+| [`private-registry.yml`](.github/workflows/templates/private-registry.yml) | Private registry with multiple sources |
+
+Copy the template to your repository's `.github/workflows/` directory and customize as needed.
+
+### Example: Complete Mirror Setup
+
+```yaml
+name: Mirror Registry
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize registry
+        uses: moonrockz/moonbit-registry-tools@main
+        with:
+          command: init
+          registry-dir: .registry
+          registry-name: my-mirror
+
+      - name: Add mooncakes source
+        uses: moonrockz/moonbit-registry-tools@main
+        with:
+          command: source-add
+          registry-dir: .registry
+          source-name: mooncakes
+          source-preset: mooncakes
+
+      - name: Mirror all packages
+        uses: moonrockz/moonbit-registry-tools@main
+        with:
+          command: mirror
+          registry-dir: .registry
+          full: 'true'
+          verbose: 'true'
+
+      - name: Deploy to GitHub Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .registry/data
+
+      - uses: actions/deploy-pages@v4
+```
+
 ### Publishing Packages (Coming Soon)
 
 > **Note:** Publishing packages to a private registry is not yet supported. Currently, this tool only supports mirroring (pulling) packages from upstream registries.
