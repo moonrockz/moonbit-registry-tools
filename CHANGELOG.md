@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-02-04
+
+### Fixed
+
+- Handle undefined deps in dependency resolver - some mooncakes packages have deps as undefined/null
+
+## [0.2.3] - 2026-02-04
+
+### Fixed
+
+- Throw error when git clone fails instead of silently continuing
+- Check for `.git` directory to verify repo root rather than using `git rev-parse` which returns true inside any parent repo
+- Handle mooncakes index structure with `user/` prefix and `.index` suffix
+
+## [0.2.0] - 2026-02-04
+
+### Fixed
+
+- Multiple path resolution fixes for mooncakes.io index structure
+
 ## [0.1.0] - 2026-01-27
 
 ### Added
@@ -34,5 +54,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Changelog in keepachangelog format with release notes automation
 - Expanded README with getting started scenarios and configuration examples
 
-[Unreleased]: https://github.com/moonrockz/moonbit-registry-tools/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/moonrockz/moonbit-registry-tools/compare/v0.2.4...HEAD
+[0.2.4]: https://github.com/moonrockz/moonbit-registry-tools/compare/v0.2.3...v0.2.4
+[0.2.3]: https://github.com/moonrockz/moonbit-registry-tools/compare/v0.2.0...v0.2.3
+[0.2.0]: https://github.com/moonrockz/moonbit-registry-tools/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/moonrockz/moonbit-registry-tools/releases/tag/v0.1.0
