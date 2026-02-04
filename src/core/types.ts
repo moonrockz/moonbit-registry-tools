@@ -50,6 +50,12 @@ export interface MirrorSource {
   priority?: number;
 }
 
+/** Smart HTTP configuration */
+export interface SmartHttpConfig {
+  enabled: boolean;
+  git_http_backend_path?: string;
+}
+
 /** Registry configuration */
 export interface RegistryConfig {
   registry: {
@@ -75,6 +81,7 @@ export interface RegistryConfig {
     host: string;
     port: number;
     base_url: string;
+    smart_http?: SmartHttpConfig;
   };
   git: {
     remote_url: string;
@@ -103,6 +110,9 @@ export const DEFAULT_CONFIG: RegistryConfig = {
     host: "0.0.0.0",
     port: 8080,
     base_url: "http://localhost:8080",
+    smart_http: {
+      enabled: false,
+    },
   },
   git: {
     remote_url: "",

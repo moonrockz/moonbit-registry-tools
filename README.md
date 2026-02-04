@@ -460,6 +460,12 @@ mise run fmt       # Format code
 mise run clean     # Clean artifacts
 ```
 
+## Agentic Tooling
+
+This repository leverages the [AGENTS.md spec](https://github.com/anthropics/agents-spec/blob/main/AGENTS.md) and the [Agent Skills spec](https://github.com/anthropics/agents-spec/blob/main/SKILLS.md) for AI-assisted development.
+
+See [AGENTS.md](AGENTS.md) for repository conventions, task patterns, and guidance for AI agents working with this codebase.
+
 ## License
 
 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.

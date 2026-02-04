@@ -100,7 +100,8 @@ export class IndexManager {
 
   /** Sync a git-based index */
   private async syncGitIndex(source: MirrorSource, indexPath: string): Promise<void> {
-    if (existsSync(indexPath)) {
+    // Check if it's an existing git repo (not just if directory exists)
+    if (await git.isRepo(indexPath)) {
       logger.debug(`Index directory for '${source.name}' exists, pulling updates`);
       const result = await git.pull(indexPath);
       if (!result.success) {
@@ -109,8 +110,19 @@ export class IndexManager {
       return;
     }
 
+    // Remove any existing non-git directory to allow fresh clone
+    if (existsSync(indexPath)) {
+      logger.warn(`Removing invalid index directory for '${source.name}' (not a git repo)`);
+      await fs.remove(indexPath);
+    }
+
     logger.info(`Cloning index from ${source.name} (${source.index_url})`);
-    await git.clone(source.index_url, indexPath, this.config.git.branch);
+    const result = await git.clone(source.index_url, indexPath, this.config.git.branch);
+    if (!result.success) {
+      throw new Error(
+        `Failed to clone index from ${source.name} (${source.index_url}): ${result.stderr}`,
+      );
+    }
   }
 
   /** Sync an HTTP-based index (placeholder for future implementation) */

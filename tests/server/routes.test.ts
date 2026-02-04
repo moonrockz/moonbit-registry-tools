@@ -104,4 +104,25 @@ describe("Server Routes", () => {
       expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
     });
   });
+
+  describe("Smart HTTP Protocol", () => {
+    it("should return 501 for info/refs with service when smart HTTP disabled", async () => {
+      const request = new Request("http://localhost/git/index/info/refs?service=git-upload-pack");
+      const response = await handler(request);
+
+      expect(response.status).toBe(501);
+      expect(await response.text()).toContain("not implemented");
+    });
+
+    it("should return 501 for git-upload-pack POST when smart HTTP disabled", async () => {
+      const request = new Request("http://localhost/git/index/git-upload-pack", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-git-upload-pack-request" },
+      });
+      const response = await handler(request);
+
+      expect(response.status).toBe(501);
+      expect(await response.text()).toContain("not implemented");
+    });
+  });
 });

@@ -19,7 +19,9 @@ export function createServer(registry: Registry, options: ServerOptions = {}) {
   const host = options.host ?? registry.config.server.host;
   const port = options.port ?? registry.config.server.port;
 
-  const gitRoutes = createGitRoutes(registry);
+  const gitRoutes = createGitRoutes(registry, {
+    smartHttp: registry.config.server.smart_http,
+  });
   const packageRoutes = createPackageRoutes(registry);
 
   /** Main request handler */
