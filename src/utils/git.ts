@@ -35,10 +35,12 @@ async function runGit(args: string[], cwd?: string): Promise<GitResult> {
   }
 }
 
-/** Check if a directory is a git repository */
+/** Check if a directory is a git repository ROOT (not just inside a git repo) */
 export async function isGitRepo(dir: string): Promise<boolean> {
-  const result = await runGit(["rev-parse", "--git-dir"], dir);
-  return result.success;
+  // Check if .git directory exists in this specific directory
+  // This ensures we're checking if dir IS a repo, not if we're inside a parent repo
+  const gitDir = join(dir, ".git");
+  return existsSync(gitDir);
 }
 
 /** Initialize a new git repository */
