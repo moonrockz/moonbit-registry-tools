@@ -140,9 +140,24 @@ export class IndexManager {
     sourceName?: string,
   ): Promise<PackageMetadata | null> {
     const indexPath = this.getSourceIndexPath(sourceName);
-    const pkgIndexPath = join(indexPath, username, packageName);
 
-    if (!existsSync(pkgIndexPath)) {
+    // Try multiple path formats to support both standard and mooncakes index structure
+    const possiblePaths = [
+      join(indexPath, username, packageName),                    // standard: {username}/{package}
+      join(indexPath, username, `${packageName}.index`),         // mooncakes: {username}/{package}.index
+      join(indexPath, "user", username, packageName),            // mooncakes: user/{username}/{package}
+      join(indexPath, "user", username, `${packageName}.index`), // mooncakes: user/{username}/{package}.index
+    ];
+
+    let pkgIndexPath: string | null = null;
+    for (const path of possiblePaths) {
+      if (existsSync(path)) {
+        pkgIndexPath = path;
+        break;
+      }
+    }
+
+    if (!pkgIndexPath) {
       return null;
     }
 
@@ -186,18 +201,27 @@ export class IndexManager {
       return packages;
     }
 
-    const users = await fs.listDir(dir);
+    // Handle mooncakes index structure which has a 'user/' prefix
+    let baseDir = dir;
+    const userSubdir = join(dir, "user");
+    if (existsSync(userSubdir) && fs.isDirectory(userSubdir)) {
+      baseDir = userSubdir;
+    }
+
+    const users = await fs.listDir(baseDir);
     for (const user of users) {
       if (user.startsWith(".") || user === "sources") continue;
 
-      const userDir = join(dir, user);
+      const userDir = join(baseDir, user);
       if (!fs.isDirectory(userDir)) continue;
 
       const pkgs = await fs.listDir(userDir);
       for (const pkg of pkgs) {
         const pkgPath = join(userDir, pkg);
         if (fs.isFile(pkgPath)) {
-          packages.push(`${user}/${pkg}`);
+          // Remove .index suffix if present (mooncakes format)
+          const pkgName = pkg.endsWith(".index") ? pkg.slice(0, -6) : pkg;
+          packages.push(`${user}/${pkgName}`);
         }
       }
     }
