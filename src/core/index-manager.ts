@@ -197,6 +197,8 @@ export class IndexManager {
   private async listPackagesInDir(dir: string): Promise<string[]> {
     const packages: string[] = [];
 
+    logger.debug(`listPackagesInDir: dir=${dir}, exists=${existsSync(dir)}`);
+
     if (!existsSync(dir)) {
       return packages;
     }
@@ -204,11 +206,19 @@ export class IndexManager {
     // Handle mooncakes index structure which has a 'user/' prefix
     let baseDir = dir;
     const userSubdir = join(dir, "user");
-    if (existsSync(userSubdir) && fs.isDirectory(userSubdir)) {
+    const userSubdirExists = existsSync(userSubdir);
+    const userSubdirIsDir = userSubdirExists && fs.isDirectory(userSubdir);
+    logger.debug(`listPackagesInDir: userSubdir=${userSubdir}, exists=${userSubdirExists}, isDir=${userSubdirIsDir}`);
+
+    if (userSubdirIsDir) {
       baseDir = userSubdir;
     }
 
+    logger.debug(`listPackagesInDir: baseDir=${baseDir}`);
+
     const users = await fs.listDir(baseDir);
+    logger.debug(`listPackagesInDir: found ${users.length} users: ${users.slice(0, 5).join(", ")}${users.length > 5 ? "..." : ""}`);
+
     for (const user of users) {
       if (user.startsWith(".") || user === "sources") continue;
 
@@ -226,6 +236,7 @@ export class IndexManager {
       }
     }
 
+    logger.debug(`listPackagesInDir: returning ${packages.length} packages`);
     return packages;
   }
 
