@@ -143,9 +143,9 @@ export class IndexManager {
 
     // Try multiple path formats to support both standard and mooncakes index structure
     const possiblePaths = [
-      join(indexPath, username, packageName),                    // standard: {username}/{package}
-      join(indexPath, username, `${packageName}.index`),         // mooncakes: {username}/{package}.index
-      join(indexPath, "user", username, packageName),            // mooncakes: user/{username}/{package}
+      join(indexPath, username, packageName), // standard: {username}/{package}
+      join(indexPath, username, `${packageName}.index`), // mooncakes: {username}/{package}.index
+      join(indexPath, "user", username, packageName), // mooncakes: user/{username}/{package}
       join(indexPath, "user", username, `${packageName}.index`), // mooncakes: user/{username}/{package}.index
     ];
 
@@ -208,7 +208,9 @@ export class IndexManager {
     const userSubdir = join(dir, "user");
     const userSubdirExists = existsSync(userSubdir);
     const userSubdirIsDir = userSubdirExists && fs.isDirectory(userSubdir);
-    logger.debug(`listPackagesInDir: userSubdir=${userSubdir}, exists=${userSubdirExists}, isDir=${userSubdirIsDir}`);
+    logger.debug(
+      `listPackagesInDir: userSubdir=${userSubdir}, exists=${userSubdirExists}, isDir=${userSubdirIsDir}`,
+    );
 
     if (userSubdirIsDir) {
       baseDir = userSubdir;
@@ -217,7 +219,9 @@ export class IndexManager {
     logger.debug(`listPackagesInDir: baseDir=${baseDir}`);
 
     const users = await fs.listDir(baseDir);
-    logger.debug(`listPackagesInDir: found ${users.length} users: ${users.slice(0, 5).join(", ")}${users.length > 5 ? "..." : ""}`);
+    logger.debug(
+      `listPackagesInDir: found ${users.length} users: ${users.slice(0, 5).join(", ")}${users.length > 5 ? "..." : ""}`,
+    );
 
     for (const user of users) {
       if (user.startsWith(".") || user === "sources") continue;
