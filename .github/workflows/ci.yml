@@ -46,3 +46,31 @@ jobs:
 
       - name: Verify binary
         run: ./dist/moonbit-registry --version
+
+  # The only check that the main branch ruleset requires, so job renames and
+  # new jobs need no settings change. Add every new job to `needs`.
+  #
+  # `if: always()` is required: without it this job is skipped when a needed
+  # job fails, and GitHub counts a skipped required check as passed. Failed
+  # and cancelled jobs fail it.
+  ci-ok:
+    name: ci-ok
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: always()
+    needs:
+      - ci
+    steps:
+      - name: Check that every job passed or was skipped
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          failed="$(jq -r 'to_entries[]
+            | select(.value.result != "success" and .value.result != "skipped")
+            | "\(.key): \(.value.result)"' <<<"$NEEDS")"
+          if [ -n "$failed" ]; then
+            echo "::error::Some CI jobs did not pass"
+            echo "$failed"
+            exit 1
+          fi
+          echo "All CI jobs passed or were skipped."
