@@ -72,7 +72,7 @@ describe("PackageStore", () => {
     it("should return correct upstream URL", () => {
       const url = packageStore.getUpstreamUrl("moonbitlang", "core", "1.0.0");
 
-      expect(url).toBe("https://mooncakes.io/user/moonbitlang/core/1.0.0.zip");
+      expect(url).toBe("https://download.mooncakes.io/user/moonbitlang/core/1.0.0.zip");
     });
   });
 
