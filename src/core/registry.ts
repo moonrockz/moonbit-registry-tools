@@ -13,6 +13,7 @@ import logger from "../utils/logger.ts";
 import DependencyResolver from "./dependency-resolver.ts";
 import IndexManager from "./index-manager.ts";
 import PackageStore from "./package-store.ts";
+import { ProxyCache } from "./proxy.ts";
 import { SourceManager } from "./source-manager.ts";
 import type { MirrorOptions, MirrorSource, PackageMetadata, RegistryConfig } from "./types.ts";
 import { DEFAULT_CONFIG, formatPackageVersionId, parsePackageId } from "./types.ts";
@@ -23,6 +24,7 @@ export class Registry {
   public indexManager: IndexManager;
   public packageStore: PackageStore;
   public dependencyResolver: DependencyResolver;
+  public proxy: ProxyCache;
   public rootDir: string;
 
   constructor(config: RegistryConfig, rootDir: string) {
@@ -32,6 +34,7 @@ export class Registry {
     this.indexManager = new IndexManager(config, this.sourceManager);
     this.packageStore = new PackageStore(config, this.sourceManager);
     this.dependencyResolver = new DependencyResolver(this.indexManager, this.packageStore);
+    this.proxy = new ProxyCache(this);
   }
 
   /** Rebuild components that hold a source manager after a source change */
@@ -111,9 +114,17 @@ export class Registry {
       throw new Error(`Source '${source.name}' is disabled`);
     }
 
+    // In proxy mode, mirror only fills the cache: the served index is the
+    // full index of the default source, kept up to date by the proxy.
+    const proxyMode = this.proxy.enabled;
+
     // First, ensure we have the source index
     logger.info(`Updating index from source '${source.name}'...`);
-    await this.indexManager.syncSourceIndex(source.name);
+    if (proxyMode) {
+      await this.indexManager.fetchSourceIndex(source.name);
+    } else {
+      await this.indexManager.syncSourceIndex(source.name);
+    }
 
     // Resolve packages to mirror
     logger.info("Resolving packages to mirror...");
@@ -132,6 +143,7 @@ export class Registry {
 
     let downloaded = 0;
     let failed = 0;
+    let prebuilds = 0;
 
     for (const pkgName of toDownload) {
       const pkgId = parsePackageId(pkgName);
@@ -152,36 +164,61 @@ export class Registry {
       // that they are deprecated), so a mirror without them breaks builds.
       for (const version of metadata.versions) {
         try {
-          await this.packageStore.downloadPackage(
-            pkgId.username,
-            pkgId.name,
-            version.version,
-            version.checksum,
-            source.name,
-          );
+          if (proxyMode) {
+            await this.proxy.getZip(
+              pkgId.username,
+              pkgId.name,
+              version.version,
+              version.checksum,
+              source.name,
+            );
+          } else {
+            await this.packageStore.downloadPackage(
+              pkgId.username,
+              pkgId.name,
+              version.version,
+              version.checksum,
+              source.name,
+            );
+          }
           downloaded++;
         } catch (err) {
           logger.error(
             `Failed to download ${formatPackageVersionId({ ...pkgId, version: version.version })}: ${err}`,
           );
           failed++;
+          continue;
+        }
+
+        if (options.prebuild) {
+          prebuilds += await this.proxy.prefetchPrebuilds(
+            pkgId.username,
+            pkgId.name,
+            version.version,
+            source.name,
+          );
         }
       }
     }
 
-    // Publish the index entries of every resolved package where moon reads them.
-    // Versions whose archive failed to download are left out.
-    const published = await this.indexManager.publishFromSource(
-      Array.from(resolution.packages),
-      source.name,
-      (username, name, version) => this.packageStore.hasPackage(username, name, version),
-    );
-    if (published > 0) {
-      await this.indexManager.commit(`Mirror ${published} packages from ${source.name}`);
+    if (!proxyMode) {
+      // Publish the index entries of every resolved package where moon reads them.
+      // Versions whose archive failed to download are left out.
+      const published = await this.indexManager.publishFromSource(
+        Array.from(resolution.packages),
+        source.name,
+        (username, name, version) => this.packageStore.hasPackage(username, name, version),
+      );
+      if (published > 0) {
+        await this.indexManager.commit(`Mirror ${published} packages from ${source.name}`);
+      }
+      await this.indexManager.updateServerInfo();
     }
-    await this.indexManager.updateServerInfo();
 
     logger.success(`Mirrored ${downloaded} package versions (${failed} failed)`);
+    if (options.prebuild) {
+      logger.success(`Cached ${prebuilds} prebuilt wasm files`);
+    }
   }
 
   /** Get package metadata */

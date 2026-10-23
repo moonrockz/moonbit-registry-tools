@@ -6,6 +6,7 @@
  * sources array format.
  */
 
+import { UPSTREAM } from "../config/defaults.ts";
 import logger from "../utils/logger.ts";
 import type { MirrorSource, RegistryConfig } from "./types.ts";
 
@@ -95,17 +96,63 @@ export class SourceManager {
     return this.sources.has(name);
   }
 
+  /** Base URL of the zips and prebuilt wasm of a source */
+  getDownloadBase(source: MirrorSource): string {
+    if (source.download_url) {
+      return trimSlash(source.download_url);
+    }
+    // Another moonbit-registry server (for example a chained proxy) serves
+    // downloads below its own URL
+    if (source.type === "moonbit-registry" && source.url) {
+      return trimSlash(source.url);
+    }
+    return UPSTREAM.DOWNLOAD_URL;
+  }
+
   /** Build package download URL for a source */
   buildPackageUrl(source: MirrorSource, username: string, name: string, version: string): string {
-    const pattern =
-      source.package_url_pattern ??
-      "https://download.mooncakes.io/user/${username}/${name}/${version}.zip";
+    if (!source.package_url_pattern) {
+      return `${this.getDownloadBase(source)}/user/${encodeSegment(username)}/${encodeSegment(name)}/${encodeSegment(version)}.zip`;
+    }
 
-    return pattern
+    return source.package_url_pattern
       .replace(/\$\{url\}/g, source.url)
-      .replace(/\$\{username\}/g, username)
-      .replace(/\$\{name\}/g, name)
-      .replace(/\$\{version\}/g, version);
+      .replace(/\$\{download_url\}/g, this.getDownloadBase(source))
+      .replace(/\$\{username\}/g, encodeSegment(username))
+      .replace(/\$\{name\}/g, encodeSegment(name))
+      .replace(/\$\{version\}/g, encodeSegment(version));
+  }
+
+  /**
+   * Build the URL of a prebuilt wasm file (or its `.sha256`) for a source:
+   * `<download>/prebuild/<owner>/<name>@<version>[/<package path>]/<file>`
+   */
+  buildPrebuildUrl(
+    source: MirrorSource,
+    username: string,
+    name: string,
+    version: string,
+    packagePath: string[],
+    file: string,
+  ): string {
+    const segments = [
+      encodeSegment(username),
+      `${encodeSegment(name)}@${encodeSegment(version)}`,
+      ...packagePath.map(encodeSegment),
+      encodeSegment(file),
+    ];
+    return `${this.getDownloadBase(source)}/prebuild/${segments.join("/")}`;
+  }
+
+  /** URL of the symbol database of a source */
+  getSymbolsUrl(source: MirrorSource): string {
+    if (source.symbols_url) {
+      return source.symbols_url;
+    }
+    if (source.type === "moonbit-registry" && source.url && !source.download_url) {
+      return `${trimSlash(source.url)}/symbols.zip`;
+    }
+    return `${this.getDownloadBase(source)}/symbols.zip`;
   }
 
   /** Get fetch options with auth headers for a source */
@@ -148,6 +195,18 @@ export class SourceManager {
       return process.env[varName] ?? "";
     });
   }
+}
+
+/** Percent-encode one URL path segment as moon does (RFC 3986 unreserved kept) */
+export function encodeSegment(segment: string): string {
+  return encodeURIComponent(segment).replace(
+    /[!'()*]/g,
+    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+}
+
+function trimSlash(url: string): string {
+  return url.replace(/\/+$/, "");
 }
 
 export default SourceManager;

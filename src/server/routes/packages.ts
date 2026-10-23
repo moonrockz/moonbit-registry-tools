@@ -4,6 +4,7 @@
 
 import { existsSync } from "node:fs";
 import { stat } from "node:fs/promises";
+import { ProxyError } from "../../core/proxy.ts";
 import type { Registry } from "../../core/registry.ts";
 import logger from "../../utils/logger.ts";
 
@@ -17,7 +18,23 @@ export function createPackageRoutes(registry: Registry) {
     // Check if package exists locally
     let packagePath = registry.packageStore.getPackageFile(username, packageName, version);
 
-    if (!packagePath) {
+    if (!packagePath && registry.proxy.enabled) {
+      // Proxy mode: fetch only versions that the served index lists, and
+      // cache them only when they match the index checksum
+      const metadata = await registry.getPackage(username, packageName);
+      const checksum = metadata?.versions.find((v) => v.version === version)?.checksum;
+      if (!checksum) {
+        return new Response("Package not found", { status: 404 });
+      }
+      try {
+        packagePath = await registry.proxy.getZip(username, packageName, version, checksum);
+      } catch (err) {
+        const status = err instanceof ProxyError ? err.status : 502;
+        const log = status === 404 ? logger.warn : logger.error;
+        log(`Proxy fetch of ${username}/${packageName}@${version} failed: ${err}`);
+        return new Response(status === 404 ? "Package not found" : "Bad gateway", { status });
+      }
+    } else if (!packagePath) {
       // Try to download from the default source if enabled
       if (registry.sourceManager.getDefaultSource()?.enabled) {
         try {

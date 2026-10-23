@@ -92,6 +92,12 @@ function generateToml(config: RegistryConfig): string {
       if (source.package_url_pattern) {
         lines.push(`package_url_pattern = "${source.package_url_pattern}"`);
       }
+      if (source.download_url) {
+        lines.push(`download_url = "${source.download_url}"`);
+      }
+      if (source.symbols_url) {
+        lines.push(`symbols_url = "${source.symbols_url}"`);
+      }
       lines.push(`enabled = ${source.enabled}`);
       if (source.priority !== undefined) {
         lines.push(`priority = ${source.priority}`);
@@ -136,6 +142,14 @@ function generateToml(config: RegistryConfig): string {
     if (config.server.smart_http.git_http_backend_path) {
       lines.push(`git_http_backend_path = "${config.server.smart_http.git_http_backend_path}"`);
     }
+    lines.push("");
+  }
+
+  if (config.proxy) {
+    lines.push("[proxy]");
+    lines.push(`enabled = ${config.proxy.enabled}`);
+    lines.push(`index_refresh_interval = "${config.proxy.index_refresh_interval}"`);
+    lines.push(`symbols_max_age = "${config.proxy.symbols_max_age}"`);
     lines.push("");
   }
 

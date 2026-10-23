@@ -14,6 +14,7 @@ interface MirrorCommandOptions {
   quiet?: boolean;
   dir?: string;
   source?: string;
+  prebuild?: boolean;
 }
 
 export function registerMirrorCommand(program: Command): void {
@@ -25,6 +26,7 @@ export function registerMirrorCommand(program: Command): void {
     .option("-q, --quiet", "Suppress warnings about skipped dependencies")
     .option("-d, --dir <path>", "Registry directory (default: current directory)")
     .option("-s, --source <name>", "Source to mirror from (uses default if not specified)")
+    .option("--prebuild", "Also fetch the prebuilt wasm of executable packages")
     .action(async (patterns: string[], options: MirrorCommandOptions) => {
       try {
         if (options.quiet) {
@@ -56,6 +58,7 @@ export function registerMirrorCommand(program: Command): void {
           strict: options.strict ?? false,
           quiet: options.quiet ?? false,
           source: options.source,
+          prebuild: options.prebuild ?? false,
         };
 
         const sourceName =
@@ -63,6 +66,9 @@ export function registerMirrorCommand(program: Command): void {
         logger.info(`Mirroring packages from '${sourceName}'${options.full ? " (full)" : ""}`);
         if (!options.full) {
           logger.info(`Patterns: ${patternsToUse.join(", ")}`);
+        }
+        if (registry.proxy.enabled) {
+          logger.info("Proxy mode: filling the cache, the served index is not changed");
         }
         if (options.strict) {
           logger.info("Strict mode: dependencies will not be automatically included");
