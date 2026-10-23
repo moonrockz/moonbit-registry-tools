@@ -199,6 +199,45 @@ describe("source download URLs", () => {
     );
   });
 
+  it("should honor download_url of the mooncakes preset", () => {
+    const mooncakes = {
+      name: "mooncakes",
+      ...PREDEFINED_SOURCES.mooncakes,
+      download_url: "https://dl.example.com",
+    };
+    expect(manager.buildPackageUrl(mooncakes, "alice", "app", "1.0.0")).toBe(
+      "https://dl.example.com/user/alice/app/1.0.0.zip",
+    );
+  });
+
+  it("should ignore the old mooncakes pattern that earlier versions wrote", () => {
+    const s = source({
+      type: "mooncakes",
+      download_url: "https://dl.example.com",
+      package_url_pattern: "https://download.mooncakes.io/user/${username}/${name}/${version}.zip",
+    });
+    expect(manager.buildPackageUrl(s, "alice", "app", "1.0.0+build")).toBe(
+      "https://dl.example.com/user/alice/app/1.0.0%2Bbuild.zip",
+    );
+  });
+
+  it("should give the same zip URL for the legacy upstream source", () => {
+    const legacy = new SourceManager(
+      validateConfig({
+        upstream: {
+          enabled: true,
+          url: "https://mooncakes.io",
+          index_url: "https://mooncakes.io/git/index",
+        },
+      }),
+    );
+    const upstream = legacy.getDefaultSource();
+    expect(upstream?.package_url_pattern).toBeUndefined();
+    expect(legacy.buildPackageUrl(upstream as MirrorSource, "alice", "app", "1.0.0+build")).toBe(
+      "https://download.mooncakes.io/user/alice/app/1.0.0%2Bbuild.zip",
+    );
+  });
+
   it("should keep download.mooncakes.io as the zip default", () => {
     expect(manager.buildPackageUrl(source({}), "alice", "app", "1.0.0")).toBe(
       "https://download.mooncakes.io/user/alice/app/1.0.0.zip",

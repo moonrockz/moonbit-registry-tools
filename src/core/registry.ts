@@ -118,10 +118,19 @@ export class Registry {
     // full index of the default source, kept up to date by the proxy.
     const proxyMode = this.proxy.enabled;
 
+    // The proxy serves the index of the default source only
+    const proxySource = proxyMode && source.name === this.sourceManager.getDefaultSourceName();
+
     // First, ensure we have the source index
     logger.info(`Updating index from source '${source.name}'...`);
     if (proxyMode) {
-      await this.indexManager.fetchSourceIndex(source.name);
+      // A new registry has no served index yet: make it now, so that a copy of
+      // the registry can serve the index without upstream. When the index is
+      // ready, leave it to the proxy (a server can run at the same time).
+      const made = proxySource && !this.proxy.indexReady && (await this.proxy.refreshIndex());
+      if (!made) {
+        await this.indexManager.fetchSourceIndex(source.name);
+      }
     } else {
       await this.indexManager.syncSourceIndex(source.name);
     }
@@ -213,6 +222,15 @@ export class Registry {
         await this.indexManager.commit(`Mirror ${published} packages from ${source.name}`);
       }
       await this.indexManager.updateServerInfo();
+    }
+
+    if (proxySource) {
+      // moon update fetches symbols.zip too; cache it for offline use
+      try {
+        await this.proxy.getSymbols();
+      } catch (err) {
+        logger.warn(`Cannot cache symbols.zip: ${err instanceof Error ? err.message : err}`);
+      }
     }
 
     logger.success(`Mirrored ${downloaded} package versions (${failed} failed)`);

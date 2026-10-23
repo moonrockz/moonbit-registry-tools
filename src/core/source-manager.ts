@@ -10,6 +10,10 @@ import { UPSTREAM } from "../config/defaults.ts";
 import logger from "../utils/logger.ts";
 import type { MirrorSource, RegistryConfig } from "./types.ts";
 
+/** Zip URL pattern that the mooncakes preset had before download_url */
+const LEGACY_MOONCAKES_PATTERN =
+  "https://download.mooncakes.io/user/${username}/${name}/${version}.zip";
+
 export class SourceManager {
   private sources: Map<string, MirrorSource>;
   private defaultSourceName: string | null;
@@ -32,8 +36,6 @@ export class SourceManager {
         url: config.upstream.url,
         index_url: config.upstream.index_url,
         index_type: "git",
-        package_url_pattern:
-          "https://download.mooncakes.io/user/${username}/${name}/${version}.zip",
         enabled: config.upstream.enabled,
         priority: 0,
       };
@@ -111,7 +113,9 @@ export class SourceManager {
 
   /** Build package download URL for a source */
   buildPackageUrl(source: MirrorSource, username: string, name: string, version: string): string {
-    if (!source.package_url_pattern) {
+    // Earlier versions wrote this pattern for the mooncakes preset; it gives
+    // the same URL as the download base, so let download_url change it
+    if (!source.package_url_pattern || source.package_url_pattern === LEGACY_MOONCAKES_PATTERN) {
       return `${this.getDownloadBase(source)}/user/${encodeSegment(username)}/${encodeSegment(name)}/${encodeSegment(version)}.zip`;
     }
 

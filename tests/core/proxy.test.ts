@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { $ } from "bun";
 import { Registry } from "../../src/core/registry.ts";
 import { sha256 } from "../../src/utils/crypto.ts";
+import logger from "../../src/utils/logger.ts";
 import {
   type FakeDownloadHost,
   commitIndexFiles,
@@ -216,6 +217,34 @@ describe("Proxy mode", () => {
       expect(await commitCount(registry)).toBe(before);
       // Without --prebuild no wasm is fetched
       expect(host.hitCount("/prebuild/alice/tool@1.0.0/cmd/run/run.wasm.sha256")).toBe(0);
+    });
+
+    it("should make the served index and cache symbols.zip on a new registry", async () => {
+      host.files.set("/symbols.zip", "symbols");
+      const registry = await initProxyRegistry();
+      expect(registry.proxy.indexReady).toBe(false);
+
+      await registry.mirror(options);
+
+      // A copy of this registry can now serve the index without upstream
+      expect(await commitCount(registry)).toBe(1);
+      expect(await servedFile(registry, "user/carol/other.index")).toBe(otherIndex);
+      const reloaded = await Registry.load(join(tempDir, "registry"));
+      reloaded.config.proxy = registry.config.proxy;
+      expect(reloaded.proxy.indexReady).toBe(true);
+      expect(await readFile(registry.proxy.symbolsPath, "utf-8")).toBe("symbols");
+    });
+
+    it("should continue when symbols.zip cannot be fetched", async () => {
+      const registry = await initProxyRegistry();
+      const warn = spyOn(logger, "warn");
+
+      await registry.mirror(options);
+
+      expect(registry.packageStore.hasPackage("alice", "tool", "1.0.0")).toBe(true);
+      expect(existsSync(registry.proxy.symbolsPath)).toBe(false);
+      expect(warn.mock.calls.some(([m]) => String(m).includes("symbols.zip"))).toBe(true);
+      warn.mockRestore();
     });
 
     it("should fetch prebuilt wasm of executable packages with --prebuild", async () => {
