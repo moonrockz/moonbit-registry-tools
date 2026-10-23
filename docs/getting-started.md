@@ -89,6 +89,9 @@ For permanent configuration, set the environment variable in your shell profile:
 export MOONCAKES_REGISTRY=http://localhost:8080
 ```
 
+{: .warning }
+When `$MOON_HOME/config.json` (default `~/.moon/config.json`) exists, moon ignores `MOONCAKES_REGISTRY`. Remove that file, or put your registry URLs in it. See [How the Registry Works]({{ site.baseurl }}/registry-how-it-works).
+
 ## Step 5: Use Your Registry
 
 Now you can use moon commands as usual, and they'll fetch packages from your local registry:

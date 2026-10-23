@@ -3,6 +3,11 @@
 **Date:** 2025-01-27
 **Task:** Implement MoonBit Registry Tools CLI
 
+> **Note:** This is a record of the first implementation session. Some details are out of date.
+> Since v0.3.0, `serve` uses Git Smart HTTP by default, because current moon clones and
+> fetches the index with `--depth 1`. Dumb HTTP is only a fallback for full clones, and moon
+> cannot use it. See the [CHANGELOG](../CHANGELOG.md) for the current behaviour.
+
 ## Overview
 
 Implemented a complete TypeScript CLI tool using Bun that helps users manage MoonBit registries, including local registry setup, mirroring from mooncakes.io, and serving as a registry server.
@@ -15,7 +20,7 @@ Implemented a complete TypeScript CLI tool using Bun that helps users manage Moo
 |---------|-------------|
 | `moonbit-registry init [path]` | Initialize a new local registry |
 | `moonbit-registry mirror [patterns...]` | Mirror packages from upstream with glob patterns |
-| `moonbit-registry serve [--port]` | Start the registry server (Dumb HTTP) |
+| `moonbit-registry serve [--port]` | Start the registry server (Smart HTTP since v0.3.0; first version: dumb HTTP) |
 | `moonbit-registry config [key] [value]` | View or modify configuration |
 | `moonbit-registry sync [--push\|--pull]` | Sync with remote git repository |
 
@@ -48,7 +53,7 @@ moonbit-registry-tools/
 │   ├── server/
 │   │   ├── index.ts                # Bun HTTP server
 │   │   ├── routes/
-│   │   │   ├── git.ts              # Git index endpoints (Dumb HTTP)
+│   │   │   ├── git.ts              # Git index endpoints (Smart HTTP since v0.3.0)
 │   │   │   └── packages.ts         # Package download endpoints
 │   │   └── middleware.ts           # CORS, logging, error handling
 │   ├── config/
@@ -105,7 +110,8 @@ moonbit-registry-tools/
 - Automatically resolves and includes transitive dependencies
 
 ### Server
-- Dumb HTTP protocol for Git index serving
+- Git index served over HTTP. The first version used the dumb HTTP protocol only.
+  Since v0.3.0, Smart HTTP is on by default, with dumb HTTP as a fallback for full clones.
 - Package downloads at `/user/{username}/{package}/{version}.zip`
 - CORS support for browser access
 - Health check endpoint at `/health`
@@ -173,7 +179,7 @@ CLI tool for managing MoonBit registries
 
 ## Future Work
 
-See `docs/prds/smart-http-protocol.md` for the planned Smart HTTP protocol implementation which will enable:
+See `docs/prds/smart-http-protocol.md` for the Smart HTTP plan. Smart HTTP is now implemented and on by default (v0.3.0). The PRD also lists:
 - Efficient delta transfers for large indexes
 - Native `git push` support for publishing packages
 - Built-in authentication support

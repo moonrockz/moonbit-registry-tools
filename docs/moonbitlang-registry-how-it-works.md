@@ -35,7 +35,7 @@ At a high level, the official registry is organized like this:
   - Stored in a **Git repository**, so it can be versioned, cloned, and diffed.
 
 - **Package archives**
-  - Stored as versioned tarballs/archives.
+  - Stored as versioned `.zip` archives.
   - Serve as immutable artifacts for a given package version.
 
 This split (index vs archives) is the key to efficient sync and caching.
@@ -60,6 +60,11 @@ When you run `moon update` or build with dependencies:
 
 1. **Index sync**  
    `moon` pulls the package index (git-based), so it can resolve versions and deps.
+   The first clone is `git clone --depth 1 --single-branch --no-tags`. Later updates use
+   `git fetch --depth=1 origin +refs/heads/main:refs/remotes/origin/main`. So the index must be
+   on a branch named `main`, on a server that supports Git Smart HTTP (or a GitHub repository URL).
+   Static hosts with dumb HTTP (for example GitHub Pages) fail with
+   `dumb http transport does not support shallow capabilities`.
 
 2. **Dependency resolution**  
    `moon` computes a dependency graph from the index metadata.
@@ -68,6 +73,15 @@ When you run `moon update` or build with dependencies:
    `moon` downloads the exact archives for the resolved versions.
 
 This is why a local registry can fully replace mooncakes.io: if it exposes the same index and archive layout, `moon` can use it transparently.
+
+`moon` gets the registry URLs in one of two ways:
+
+- `MOONCAKES_REGISTRY=<url>`: the index is `<url>/git/index`, and archives come from `<url>/user/...`.
+- `$MOON_HOME/config.json` with the keys `api`, `index`, `download` (and optionally `symbols`).
+  When this file exists, `moon` ignores `MOONCAKES_REGISTRY`.
+
+Current `moon` also reads only `moon.mod` and `moon.pkg` project files. It rejects the old
+`moon.mod.json` and `moon.pkg.json` files.
 
 ---
 

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- The `mirror-registry.yml` and `private-registry.yml` workflow templates no longer deploy the
+  index to GitHub Pages. Current moon fetches the index with `--depth 1`, and the dumb HTTP
+  protocol of static hosts cannot do shallow fetches. The templates now push the index to
+  branch `main` of a git repository on GitHub with a deploy key. Clients use
+  `$MOON_HOME/config.json` with `index` set to that repository.
+- The CI cache keys in the README, the CI/CD cache recipe and `ci-with-cache.yml` now hash
+  `moon.mod`. Current moon does not accept `moon.mod.json`.
+- The CI/CD cache recipes now download the `moonbit-registry` binary on each run and mirror
+  the packages before `serve`. Before, a cache hit had no binary, and the served index was empty.
+- The README and the KB pages describe the client configuration (`MOONCAKES_REGISTRY` and
+  `$MOON_HOME/config.json`) and the Smart HTTP and `main` branch requirements of current moon.
+- `docs/session-summary.md` says that `serve` uses Smart HTTP since v0.3.0.
+- The Multiple Sources recipe now describes how v0.3.0 picks a source. The Team Registry
+  Dockerfile now uses a Debian image with `git`, which Smart HTTP needs.
+- The GitHub Actions example in the Authentication recipe now renders `secrets.*` correctly on
+  the documentation site.
+
 ## [0.3.0] - 2026-10-22
 
 ### Fixed

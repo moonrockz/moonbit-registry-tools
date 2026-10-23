@@ -50,18 +50,24 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .moonbit-registry
-          key: moonbit-packages-{% raw %}{{ hashFiles('moon.mod.json') }}{% endraw %}
+          key: moonbit-packages-{% raw %}{{ hashFiles('moon.mod') }}{% endraw %}
           restore-keys: |
             moonbit-packages-
 
       - name: Setup local registry
         run: |
-          # Download moonbit-registry if not cached
+          # The cache holds the registry, not the binary, so always download it
+          curl -LO https://github.com/moonrockz/moonbit-registry-tools/releases/latest/download/moonbit-registry-linux-x64.tar.gz
+          tar -xzf moonbit-registry-linux-x64.tar.gz
+
           if [ ! -f .moonbit-registry/registry.toml ]; then
-            curl -LO https://github.com/moonrockz/moonbit-registry-tools/releases/latest/download/moonbit-registry-linux-x64.tar.gz
-            tar -xzf moonbit-registry-linux-x64.tar.gz
             ./moonbit-registry init .moonbit-registry
+            ./moonbit-registry source add mooncakes --from-preset mooncakes -d .moonbit-registry
           fi
+
+          # The served index holds only mirrored packages.
+          # Mirror the packages that your project uses (with their dependencies).
+          ./moonbit-registry mirror -d .moonbit-registry "moonbitlang/core"
 
           # Start the server in the background
           ./moonbit-registry serve -d .moonbit-registry &
@@ -80,13 +86,14 @@ jobs:
 
 ### With Pre-populated Cache
 
-For even faster builds, pre-populate the cache with commonly used packages:
+For even faster builds, mirror the packages only when the cache is empty:
 
 ```yaml
       - name: Setup local registry
         run: |
           if [ ! -f .moonbit-registry/registry.toml ]; then
             ./moonbit-registry init .moonbit-registry
+            ./moonbit-registry source add mooncakes --from-preset mooncakes -d .moonbit-registry
             # Pre-mirror common packages
             ./moonbit-registry mirror -d .moonbit-registry "moonbitlang/*"
           fi
@@ -108,33 +115,36 @@ variables:
   MOONCAKES_REGISTRY: http://localhost:8080
 
 cache:
-  key: moonbit-packages
+  key:
+    files:
+      - moon.mod
   paths:
     - .moonbit-registry/
 
+.registry-setup: &registry-setup
+  - curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+  - export PATH="$HOME/.moon/bin:$PATH"
+  # The cache holds the registry, not the binary, so always download it
+  - curl -LO https://github.com/moonrockz/moonbit-registry-tools/releases/latest/download/moonbit-registry-linux-x64.tar.gz
+  - tar -xzf moonbit-registry-linux-x64.tar.gz
+  - |
+    if [ ! -f .moonbit-registry/registry.toml ]; then
+      ./moonbit-registry init .moonbit-registry
+      ./moonbit-registry source add mooncakes --from-preset mooncakes -d .moonbit-registry
+    fi
+  - ./moonbit-registry mirror -d .moonbit-registry "moonbitlang/core"
+  - ./moonbit-registry serve -d .moonbit-registry &
+  - sleep 2
+
 build:
   stage: build
-  before_script:
-    - curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
-    - export PATH="$HOME/.moon/bin:$PATH"
-    - |
-      if [ ! -f .moonbit-registry/registry.toml ]; then
-        curl -LO https://github.com/moonrockz/moonbit-registry-tools/releases/latest/download/moonbit-registry-linux-x64.tar.gz
-        tar -xzf moonbit-registry-linux-x64.tar.gz
-        ./moonbit-registry init .moonbit-registry
-      fi
-    - ./moonbit-registry serve -d .moonbit-registry &
-    - sleep 2
+  before_script: *registry-setup
   script:
     - moon build
 
 test:
   stage: test
-  before_script:
-    - curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
-    - export PATH="$HOME/.moon/bin:$PATH"
-    - ./moonbit-registry serve -d .moonbit-registry &
-    - sleep 2
+  before_script: *registry-setup
   script:
     - moon test
 ```
@@ -143,7 +153,8 @@ test:
 
 ## Self-Hosted Registry
 
-For organizations with many CI jobs, consider running a persistent registry server:
+For organizations with many CI jobs, consider running a persistent registry server.
+The server must serve the index with Git Smart HTTP (the default for `moonbit-registry serve`):
 
 1. Deploy the registry on a dedicated server
 2. Pre-populate with all packages your projects need
@@ -157,12 +168,28 @@ env:
 
 This eliminates the need for per-job caching and ensures consistent package availability.
 
+If your index is in a git repository on GitHub (see the `mirror-registry.yml` template), write
+`$MOON_HOME/config.json` in the job instead. When that file exists, moon ignores `MOONCAKES_REGISTRY`.
+
+```yaml
+      - name: Configure moon
+        run: |
+          mkdir -p ~/.moon
+          cat > ~/.moon/config.json << 'EOF'
+          {
+            "api": "https://mooncakes.io",
+            "index": "https://github.com/my-org/mooncakes-index.git",
+            "download": "https://download.mooncakes.io"
+          }
+          EOF
+```
+
 ---
 
 ## Tips
 
 {: .tip }
-**Cache Key Strategy**: Use `moon.mod.json` hash as part of the cache key to invalidate when dependencies change.
+**Cache Key Strategy**: Use the `moon.mod` hash as part of the cache key to invalidate when dependencies change. Current moon does not accept `moon.mod.json`.
 
 {: .warning }
 **Cache Size**: The `--full` mirror can be large. Consider mirroring only packages you actually use.

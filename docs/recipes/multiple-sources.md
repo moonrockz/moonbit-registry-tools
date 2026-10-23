@@ -131,12 +131,27 @@ default_source = "mooncakes"
 
 ## Priority and Fallback
 
-Sources are tried in priority order (lower number = higher priority) when:
+Each source has a priority (lower number = higher priority). In v0.3.0, the commands do not use
+the priority to pick a source:
 
-1. A package is requested but not cached
-2. The server's upstream fallback is enabled
+- `mirror` uses the default source. Use `-s` to mirror from a different source.
+- When `serve` gets a request for an archive that is not cached, it downloads the archive from the
+  default source.
 
-For mirroring, you must explicitly specify the source with `-s` unless using the default.
+The served index holds only mirrored packages, so `moon` can resolve only packages that you mirrored.
+
+---
+
+## Serving Packages from Many Sources
+
+`moon` downloads all archives from one download host. Run `moonbit-registry serve` on a host with
+all sources, mirror from each source, and point clients at that host:
+
+```bash
+export MOONCAKES_REGISTRY=http://registry-server:8080
+```
+
+The server then serves one index and the archives of all mirrored packages.
 
 ---
 

@@ -56,4 +56,5 @@ moonbit-registry sync [--push] [--pull]
 | Variable | Description |
 |----------|-------------|
 | `MOONCAKES_REGISTRY` | URL of the registry for moon CLI |
+| `MOON_HOME` | moon home directory (default `~/.moon`). If `$MOON_HOME/config.json` exists, moon ignores `MOONCAKES_REGISTRY` |
 | `PARTNER_REGISTRY_TOKEN` | Token for authenticated sources (example) |

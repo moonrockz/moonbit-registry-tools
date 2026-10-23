@@ -38,7 +38,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.REGISTRY_DIR }}
-          key: moonbit-registry-${{ hashFiles('moon.mod.json') }}
+          key: moonbit-registry-${{ hashFiles('moon.mod') }}
           restore-keys: |
             moonbit-registry-
 

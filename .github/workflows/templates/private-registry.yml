@@ -1,16 +1,65 @@
 # Private MoonBit Registry Template
 #
-# This workflow maintains a private registry that combines:
-# - Mirrored packages from mooncakes.io
-# - Your organization's private packages
-#
-# Copy this file to your repository's .github/workflows/ directory.
+# This workflow keeps a private, curated package index for your organization.
+# The index holds only the packages that you approve (and their dependencies),
+# mirrored from mooncakes.io. The job pushes the index to branch main of a
+# private git repository on GitHub. Copy this file to the
+# .github/workflows/ directory of the repository that runs the job.
 #
 # Features:
-# - Hybrid public/private package support
-# - Git-based index for version control
-# - Automatic deployment to GitHub Pages
-# - Support for multiple upstream sources
+# - Allow-list of packages, kept in this file
+# - Weekly sync, manual trigger, and sync when this file changes
+# - Git-based index with history, in a private repository
+#
+# Why a git repository and not GitHub Pages:
+# Current moon clones the index with "git clone --depth 1 --single-branch"
+# and updates it with "git fetch --depth=1 origin +refs/heads/main:...".
+# Shallow fetches need the Git Smart HTTP protocol and a branch named main.
+# A GitHub repository URL has both. GitHub Pages and other static hosts use
+# the dumb HTTP protocol, which cannot do shallow fetches. moon then fails
+# with "dumb http transport does not support shallow capabilities".
+#
+# Setup:
+# 1. Create a private index repository, for example my-org/moonbit-index.
+#    Initialize it with a README, so that branch main exists.
+# 2. Let organization members use deploy keys:
+#    Organization Settings > Member privileges > Deploy keys.
+# 3. Make an SSH key pair:
+#      ssh-keygen -t ed25519 -N "" -C "private-registry" -f registry-key
+# 4. In the index repository, add registry-key.pub as a deploy key:
+#    Settings > Deploy keys > Add deploy key. Select "Allow write access".
+# 5. In the repository that runs this workflow, add the private key
+#    (the content of registry-key) as the secret INDEX_DEPLOY_KEY:
+#    Settings > Secrets and variables > Actions > New repository secret.
+#    Then delete the local key files.
+# 6. Set INDEX_REPOSITORY and APPROVED_PACKAGES below.
+#
+# mirror only adds packages. To remove a package from the index, delete its
+# file user/<owner>/<pkg>.index in the index repository.
+#
+# Client setup:
+# This index holds only metadata. The package archives (.zip) stay on the
+# mooncakes.io download host. On each client, write $MOON_HOME/config.json
+# (default ~/.moon/config.json):
+#
+#   {
+#     "api": "https://mooncakes.io",
+#     "index": "https://github.com/my-org/moonbit-index.git",
+#     "download": "https://download.mooncakes.io"
+#   }
+#
+# Then run "moon update". When config.json exists, moon ignores
+# MOONCAKES_REGISTRY. moon uses git to clone the index, so each client needs
+# git credentials for the private repository (for example from
+# "gh auth setup-git" or another git credential helper).
+#
+# Packages from other sources:
+# moon downloads all archives from one download host. If the index must also
+# hold packages from a private source, that host must serve those archives.
+# For that case, run "moonbit-registry serve" on a host with all sources
+# (see the README and docs/recipes/multiple-sources.md) and point clients at
+# it with MOONCAKES_REGISTRY=http://<serve-host>:8080. Do not write
+# config.json in that case.
 
 name: Private Registry
 
@@ -18,41 +67,53 @@ on:
   push:
     branches: [main]
     paths:
-      - 'packages/**'
-      - 'registry.toml'
+      - '.github/workflows/private-registry.yml'
 
   schedule:
-    # Sync public packages weekly
+    # Sync weekly, Sunday at 3 AM UTC
     - cron: '0 3 * * 0'
 
   workflow_dispatch:
-    inputs:
-      sync_public:
-        description: 'Sync public packages from mooncakes'
-        type: boolean
-        default: true
 
 concurrency:
   group: registry
   cancel-in-progress: false
 
 env:
+  # Private index repository (owner/name). The job pushes to its main branch.
+  INDEX_REPOSITORY: my-org/moonbit-index
+
+  # Space-separated list of approved package patterns.
+  # mirror adds their transitive dependencies.
+  APPROVED_PACKAGES: "moonbitlang/core moonbitlang/x"
+
   REGISTRY_DIR: registry
 
+# The job pushes with the deploy key, so it does not write to this repository
 permissions:
-  contents: write
-  pages: write
-  id-token: write
+  contents: read
 
 jobs:
   update:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
 
     steps:
-      - name: Checkout
+      # The index repository becomes the registry's data/index directory.
+      # "init" keeps an existing git repository there.
+      - name: Checkout index repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          repository: ${{ env.INDEX_REPOSITORY }}
+          ref: main
+          ssh-key: ${{ secrets.INDEX_DEPLOY_KEY }}
+          path: ${{ env.REGISTRY_DIR }}/data/index
+
+      - name: Configure git
+        run: |
+          cd "${{ env.REGISTRY_DIR }}/data/index"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Initialize registry
         uses: moonrockz/moonbit-registry-tools@main
@@ -60,14 +121,6 @@ jobs:
           command: init
           registry-dir: ${{ env.REGISTRY_DIR }}
           registry-name: my-org-registry
-
-      - name: Configure git remote
-        uses: moonrockz/moonbit-registry-tools@main
-        with:
-          command: config
-          registry-dir: ${{ env.REGISTRY_DIR }}
-          config-key: git.remote_url
-          config-value: ${{ github.server_url }}/${{ github.repository }}.git
 
       - name: Add mooncakes source
         uses: moonrockz/moonbit-registry-tools@main
@@ -77,75 +130,32 @@ jobs:
           source-name: mooncakes
           source-preset: mooncakes
 
-      - name: Sync public packages
-        if: github.event.inputs.sync_public != 'false' || github.event_name == 'schedule'
+      # mirror downloads and verifies each archive, writes the index files
+      # to data/index/user/<owner>/<pkg>.index and commits them
+      - name: Mirror approved packages
         uses: moonrockz/moonbit-registry-tools@main
         with:
           command: mirror
           registry-dir: ${{ env.REGISTRY_DIR }}
-          # Customize which public packages to mirror
-          patterns: |
-            moonbitlang/core
-            moonbitlang/x
+          patterns: ${{ env.APPROVED_PACKAGES }}
           verbose: true
 
-      # Add your private packages here
-      # This step would copy your organization's packages into the registry
-      - name: Add private packages
-        run: |
-          if [ -d "packages" ]; then
-            echo "Copying private packages..."
-            cp -r packages/* ${{ env.REGISTRY_DIR }}/data/packages/ 2>/dev/null || true
-          fi
-
-      - name: Commit changes
-        run: |
-          cd ${{ env.REGISTRY_DIR }}
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          git add -A
-          if ! git diff --staged --quiet; then
-            git commit -m "Update registry - $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
-          fi
-
       - name: Push index
-        uses: moonrockz/moonbit-registry-tools@main
-        with:
-          command: sync
-          registry-dir: ${{ env.REGISTRY_DIR }}
-          sync-mode: push
-
-  deploy:
-    needs: update
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: main
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
-
-      - name: Prepare site
         run: |
-          mkdir -p _site/git
+          cd "${{ env.REGISTRY_DIR }}/data/index"
+          if [ -z "$(git log origin/main..HEAD --oneline)" ]; then
+            echo "No index changes to push"
+          else
+            git push origin HEAD:main
+          fi
 
-          # Clone index as bare repo for git dumb HTTP protocol
-          git clone --bare ${{ env.REGISTRY_DIR }}/data/index _site/git/index
-          cd _site/git/index
-          git update-server-info
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: _site
-
-      - name: Deploy to Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Summary
+        run: |
+          cd "${{ env.REGISTRY_DIR }}/data/index"
+          TOTAL_PACKAGES=$(find user -name "*.index" -type f 2>/dev/null | wc -l)
+          {
+            echo "## Private Registry Summary"
+            echo ""
+            echo "- **Packages in index**: $TOTAL_PACKAGES"
+            echo "- **Index**: https://github.com/${{ env.INDEX_REPOSITORY }}.git (branch main)"
+          } >> "$GITHUB_STEP_SUMMARY"
