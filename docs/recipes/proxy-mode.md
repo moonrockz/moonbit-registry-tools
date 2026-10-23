@@ -18,6 +18,13 @@ Run a registry that has all of mooncakes.io, but downloads files only when a cli
 - A laptop must continue to build when the network is not available.
 - You do not want to mirror all of mooncakes.io first (about 16 GB of zips).
 
+This page is the reference for proxy mode. For step-by-step examples, see
+[Personal Proxy]({{ site.baseurl }}/recipes/proxy-personal),
+[Team Proxy]({{ site.baseurl }}/recipes/proxy-team),
+[Corporate Network]({{ site.baseurl }}/recipes/proxy-corporate),
+[mooncakes.io Outage]({{ site.baseurl }}/recipes/proxy-outage) and the proxy section of
+[CI/CD Cache]({{ site.baseurl }}/recipes/ci-cd-cache).
+
 ## How It Works
 
 In proxy mode, `moonbit-registry serve`:

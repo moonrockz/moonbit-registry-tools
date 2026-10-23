@@ -170,5 +170,8 @@ moonbit-registry mirror -s partner "partner-org/*"
 ## Next Steps
 
 - Explore [Recipes]({{ site.baseurl }}/recipes) for common use cases
+- Serve all of mooncakes.io without a full mirror: [Personal Proxy]({{ site.baseurl }}/recipes/proxy-personal)
+  or [Team Proxy]({{ site.baseurl }}/recipes/proxy-team)
+- Use MoonBit packages where mooncakes.io is blocked: [Corporate Network]({{ site.baseurl }}/recipes/proxy-corporate)
 - Learn about [CI/CD Integration]({{ site.baseurl }}/recipes/ci-cd-cache)
 - Set up [Multiple Sources]({{ site.baseurl }}/recipes/multiple-sources)
