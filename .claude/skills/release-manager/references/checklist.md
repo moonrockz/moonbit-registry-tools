@@ -38,10 +38,7 @@ Edit `package.json`:
 }
 ```
 
-Edit `src/cli/index.ts`:
-```typescript
-.version("0.2.0")
-```
+The CLI and the server read the version from `package.json` (`src/version.ts`).
 
 ### Step 2: Update Changelog
 
@@ -72,7 +69,7 @@ Update links at bottom:
 
 ### Step 3: Commit Release
 ```bash
-git add package.json src/cli/index.ts CHANGELOG.md
+git add package.json CHANGELOG.md
 git commit -m "chore: release v0.2.0"
 ```
 

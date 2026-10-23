@@ -13,7 +13,7 @@ Expert guidance for managing releases of moonbit-registry-tools.
 ## Release Process Overview
 
 1. **Readiness Check** - Verify code quality, tests, and changelog
-2. **Version Bump** - Update version in package.json and src/cli/index.ts
+2. **Version Bump** - Update version in package.json
 3. **Changelog Update** - Move unreleased items to versioned section
 4. **Commit & Tag** - Create release commit and version tag
 5. **Push** - Push commit and tag to trigger release workflow
@@ -48,9 +48,10 @@ Categories: Added, Changed, Deprecated, Removed, Fixed, Security
 
 ### Version Locations
 
-Update version in TWO places:
+Update version in ONE place:
 - `package.json` - `"version": "X.Y.Z"`
-- `src/cli/index.ts` - `.version("X.Y.Z")`
+
+`src/version.ts` reads it, and the CLI (`--version`) and the server (`GET /`) use that value.
 
 ### Trigger Release
 

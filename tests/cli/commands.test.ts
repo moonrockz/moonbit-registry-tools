@@ -8,6 +8,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { $ } from "bun";
+import pkg from "../../package.json" with { type: "json" };
 
 describe("CLI Commands", () => {
   let tempDir: string;
@@ -35,6 +36,14 @@ describe("CLI Commands", () => {
     });
   });
 
+  describe("moonbit-registry --version", () => {
+    it("should print the version of package.json", async () => {
+      const result = await $`bun ${cliPath} --version`.text();
+
+      expect(result.trim()).toBe(pkg.version);
+    });
+  });
+
   describe("proxy options", () => {
     it("should offer --proxy on serve and --proxy and --prebuild on mirror", async () => {
       const serveHelp = await $`bun ${cliPath} serve --help`.text();
@@ -43,14 +52,6 @@ describe("CLI Commands", () => {
       const mirrorHelp = await $`bun ${cliPath} mirror --help`.text();
       expect(mirrorHelp).toContain("--proxy");
       expect(mirrorHelp).toContain("--prebuild");
-    });
-  });
-
-  describe("moonbit-registry --version", () => {
-    it("should show version", async () => {
-      const result = await $`bun ${cliPath} --version`.text();
-
-      expect(result.trim()).toBe("0.1.0");
     });
   });
 

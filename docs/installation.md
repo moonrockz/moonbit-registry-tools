@@ -22,13 +22,13 @@ mise use -g "github:moonrockz/moonbit-registry-tools@latest"
 This installs the latest version globally. To install a specific version:
 
 ```bash
-mise use -g "github:moonrockz/moonbit-registry-tools@0.3.0"
+mise use -g "github:moonrockz/moonbit-registry-tools@0.4.0"
 ```
 
 To add it to a project's `.mise.toml`:
 
 ```bash
-mise use "github:moonrockz/moonbit-registry-tools@0.3.0"
+mise use "github:moonrockz/moonbit-registry-tools@0.4.0"
 ```
 
 ### Windows ARM64 Users

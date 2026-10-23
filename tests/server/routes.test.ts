@@ -7,6 +7,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { $ } from "bun";
+import pkg from "../../package.json" with { type: "json" };
 import { Registry } from "../../src/core/registry.ts";
 import createServer from "../../src/server/index.ts";
 
@@ -35,6 +36,7 @@ describe("Server Routes", () => {
 
       const body = await response.json();
       expect(body.name).toBe("local-registry");
+      expect(body.version).toBe(pkg.version);
       expect(body.endpoints).toBeDefined();
     });
   });

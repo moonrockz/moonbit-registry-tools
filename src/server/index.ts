@@ -8,6 +8,7 @@ import { UPSTREAM } from "../config/defaults.ts";
 import { ProxyError } from "../core/proxy.ts";
 import type { Registry } from "../core/registry.ts";
 import logger from "../utils/logger.ts";
+import { VERSION } from "../version.ts";
 import { compose, cors, errorHandler, requestLogger } from "./middleware.ts";
 import createGitRoutes from "./routes/git.ts";
 import createPackageRoutes from "./routes/packages.ts";
@@ -57,7 +58,7 @@ export function createServer(registry: Registry, options: ServerOptions = {}) {
       return new Response(
         JSON.stringify({
           name: registry.config.registry.name,
-          version: "0.1.0",
+          version: VERSION,
           endpoints: {
             git: "/git/index",
             packages: "/user/{username}/{package}/{version}.zip",
