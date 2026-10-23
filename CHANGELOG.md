@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The GitHub Action `source-add` and `config` commands passed `-d <registry-dir>` before the
+  subcommand, so the CLI stopped with `unknown option '-d'`. The option now comes after the
+  subcommand.
+
 ### Documentation
 
 - The `mirror-registry.yml` and `private-registry.yml` workflow templates no longer deploy the
