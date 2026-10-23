@@ -285,15 +285,17 @@ export class IndexManager {
   ): string | null {
     const indexPath = this.getSourceIndexPath(sourceName);
 
-    // Try multiple path formats to support both standard and mooncakes index structure
+    // Try multiple path formats to support both standard and mooncakes index structure.
+    // A bare name can also be a directory: user/moonbitlang/lex/ holds the
+    // nested module moonbitlang/lex/runtime, next to user/moonbitlang/lex.index.
     const possiblePaths = [
-      join(indexPath, username, packageName), // standard: {username}/{package}
-      join(indexPath, username, `${packageName}.index`), // mooncakes: {username}/{package}.index
-      join(indexPath, "user", username, packageName), // mooncakes: user/{username}/{package}
       join(indexPath, "user", username, `${packageName}.index`), // mooncakes: user/{username}/{package}.index
+      join(indexPath, username, `${packageName}.index`), // mooncakes: {username}/{package}.index
+      join(indexPath, username, packageName), // standard: {username}/{package}
+      join(indexPath, "user", username, packageName), // mooncakes: user/{username}/{package}
     ];
 
-    return possiblePaths.find((path) => existsSync(path)) ?? null;
+    return possiblePaths.find((path) => fs.isFile(path)) ?? null;
   }
 
   /**
@@ -428,7 +430,7 @@ export class IndexManager {
   async getPackage(username: string, packageName: string): Promise<PackageMetadata | null> {
     const legacyPath = join(this.indexDir, username, packageName);
     const indexPath = [this.getPackageIndexPath(username, packageName), legacyPath].find((path) =>
-      existsSync(path),
+      fs.isFile(path),
     );
 
     if (!indexPath) {
@@ -473,7 +475,7 @@ export class IndexManager {
       : null;
     if (sourcePath) paths.push(sourcePath);
     for (const path of paths) {
-      if (!existsSync(path)) continue;
+      if (!fs.isFile(path)) continue;
       for (const line of (await fs.readText(path)).split("\n")) {
         if (line.trim() === "") continue;
         try {

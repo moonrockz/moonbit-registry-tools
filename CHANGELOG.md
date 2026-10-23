@@ -92,6 +92,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   was not available. `mirror --proxy` now makes the served index when it is not ready yet, and
   caches `symbols.zip`. When the served index is ready, `mirror` does not change it.
 
+- `mirror` skipped a package whose name is also the first part of a nested module name, for
+  example `moonbitlang/lex` next to `moonbitlang/lex/runtime`, with
+  `Failed to read package index ... EISDIR`. The index lookup found the directory
+  `user/moonbitlang/lex/` before the file `user/moonbitlang/lex.index`. The lookup now tries the
+  `.index` files first and reads only files.
+
 ### Documentation
 
 - The `mirror-registry.yml` and `private-registry.yml` workflow templates no longer deploy the
