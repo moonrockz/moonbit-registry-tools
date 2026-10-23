@@ -110,8 +110,9 @@ export const DEFAULT_CONFIG: RegistryConfig = {
     host: "0.0.0.0",
     port: 8080,
     base_url: "http://localhost:8080",
+    // moon clones the index with `--depth 1`, which needs smart HTTP
     smart_http: {
-      enabled: false,
+      enabled: true,
     },
   },
   git: {

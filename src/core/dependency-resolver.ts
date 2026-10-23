@@ -7,7 +7,7 @@
 import logger from "../utils/logger.ts";
 import type IndexManager from "./index-manager.ts";
 import type PackageStore from "./package-store.ts";
-import type { DependencyResolution, MirrorOptions, PackageMetadata } from "./types.ts";
+import type { DependencyResolution, MirrorOptions } from "./types.ts";
 import { parsePackageId } from "./types.ts";
 
 export class DependencyResolver {
@@ -36,10 +36,8 @@ export class DependencyResolver {
       result.packages.add(pkgName);
     }
 
-    // If not strict mode, resolve transitive dependencies
-    if (!options.strict) {
-      await this.resolveTransitiveDeps(result, options.patterns, sourceName);
-    }
+    // Resolve transitive dependencies; strict mode only records them as skipped
+    await this.resolveTransitiveDeps(result, !options.strict, sourceName);
 
     // Check which packages are already cached
     for (const pkgName of result.packages) {
@@ -80,7 +78,7 @@ export class DependencyResolver {
   /** Resolve transitive dependencies for matched packages */
   private async resolveTransitiveDeps(
     result: DependencyResolution,
-    originalPatterns: string[],
+    includeDeps: boolean,
     sourceName?: string,
   ): Promise<void> {
     const toProcess = new Set(result.packages);
@@ -101,17 +99,13 @@ export class DependencyResolver {
         : await this.indexManager.getPackage(pkgId.username, pkgId.name);
       if (!metadata) continue;
 
-      // Get deps from latest non-yanked version
-      const latestVersion = this.getLatestVersion(metadata);
-      if (!latestVersion) continue;
+      // Every version is mirrored (yanked ones too), so follow the deps of all
+      const depNames = new Set(metadata.versions.flatMap((v) => Object.keys(v.deps || {})));
 
-      for (const depName of Object.keys(latestVersion.deps || {})) {
+      for (const depName of depNames) {
         if (result.packages.has(depName)) continue;
 
-        // Check if dep matches original patterns
-        const matchesPattern = originalPatterns.some((p) => matchGlob(depName, p));
-
-        if (matchesPattern) {
+        if (includeDeps) {
           result.packages.add(depName);
           toProcess.add(depName);
         } else {
@@ -123,16 +117,6 @@ export class DependencyResolver {
         }
       }
     }
-  }
-
-  /** Get the latest non-yanked version */
-  private getLatestVersion(metadata: PackageMetadata) {
-    const versions = metadata.versions.filter((v) => !v.yanked);
-    if (versions.length === 0) return null;
-
-    // Sort by version (semver-like comparison)
-    versions.sort((a, b) => compareVersions(b.version, a.version));
-    return versions[0];
   }
 
   /** Check if any version of a package is cached */
@@ -164,38 +148,10 @@ export class DependencyResolver {
       if (result.cached.has(dep)) continue;
 
       logger.warn(
-        `Dependency '${dep}' required by [${requiredBy.join(", ")}] is not included in mirror patterns and not cached`,
+        `Dependency '${dep}' required by [${requiredBy.join(", ")}] is not mirrored in strict mode and not cached`,
       );
     }
   }
-}
-
-/** Simple glob pattern matching */
-function matchGlob(str: string, pattern: string): boolean {
-  const regexPattern = pattern
-    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
-    .replace(/\*/g, ".*")
-    .replace(/\?/g, ".");
-
-  const regex = new RegExp(`^${regexPattern}$`);
-  return regex.test(str);
-}
-
-/** Compare two version strings (simple semver-like comparison) */
-function compareVersions(a: string, b: string): number {
-  const partsA = a.split(".").map((p) => Number.parseInt(p, 10) || 0);
-  const partsB = b.split(".").map((p) => Number.parseInt(p, 10) || 0);
-
-  const maxLen = Math.max(partsA.length, partsB.length);
-  for (let i = 0; i < maxLen; i++) {
-    const numA = partsA[i] ?? 0;
-    const numB = partsB[i] ?? 0;
-    if (numA !== numB) {
-      return numA - numB;
-    }
-  }
-
-  return 0;
 }
 
 export default DependencyResolver;

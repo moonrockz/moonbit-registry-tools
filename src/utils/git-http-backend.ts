@@ -6,6 +6,7 @@
 
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { join } from "node:path";
 import logger from "./logger.ts";
 
 /** Platform-specific paths to git-http-backend */
@@ -63,6 +64,22 @@ export function findGitHttpBackend(customPath?: string): string | null {
       logger.debug(`Found git-http-backend at: ${path}`);
       return path;
     }
+  }
+
+  // Ask git where its helper programs are (Homebrew, custom builds, ...)
+  try {
+    const result = Bun.spawnSync({ cmd: ["git", "--exec-path"], stdout: "pipe", stderr: "pipe" });
+    if (result.exitCode === 0) {
+      const execPath = result.stdout.toString().trim();
+      const name = platform === "win32" ? "git-http-backend.exe" : "git-http-backend";
+      const path = join(execPath, name);
+      if (execPath && existsSync(path)) {
+        logger.debug(`Found git-http-backend in git exec path: ${path}`);
+        return path;
+      }
+    }
+  } catch {
+    // Ignore errors when git is not installed
   }
 
   // Try to find via PATH using 'which' or 'where'

@@ -19,6 +19,8 @@ export const DATA_DIRS = {
 export const UPSTREAM = {
   URL: "https://mooncakes.io",
   INDEX_URL: "https://mooncakes.io/git/index",
+  /** Registry-wide symbol database that `moon update` fetches */
+  SYMBOLS_URL: "https://download.mooncakes.io/symbols.zip",
 } as const;
 
 /** Default server settings */

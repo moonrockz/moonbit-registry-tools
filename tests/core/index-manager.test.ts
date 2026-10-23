@@ -73,7 +73,7 @@ describe("IndexManager", () => {
     it("should return correct path", () => {
       const path = indexManager.getPackageIndexPath("moonbitlang", "core");
 
-      expect(path).toBe(join(indexManager.path, "moonbitlang", "core"));
+      expect(path).toBe(join(indexManager.path, "user", "moonbitlang", "core.index"));
     });
   });
 });

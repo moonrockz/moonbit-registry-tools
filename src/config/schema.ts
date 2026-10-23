@@ -211,7 +211,7 @@ function validateSmartHttpConfig(value: unknown, field: string): SmartHttpConfig
   const config = value as Record<string, unknown>;
   return {
     enabled:
-      config.enabled !== undefined ? validateBoolean(config.enabled, `${field}.enabled`) : false,
+      config.enabled !== undefined ? validateBoolean(config.enabled, `${field}.enabled`) : true,
     git_http_backend_path:
       config.git_http_backend_path !== undefined
         ? validateString(config.git_http_backend_path, `${field}.git_http_backend_path`)

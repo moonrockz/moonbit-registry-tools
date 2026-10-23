@@ -83,11 +83,10 @@ export function createSmartHttpHandlers(options: SmartHttpOptions): SmartHttpHan
 
       return new Response(response.body, {
         status: response.status,
-        headers: {
-          "Content-Type": CONTENT_TYPES.infoRefsAdvertisement,
-          "Cache-Control": "no-cache",
-          ...response.headers,
-        },
+        headers: mergeHeaders(
+          { "Content-Type": CONTENT_TYPES.infoRefsAdvertisement, "Cache-Control": "no-cache" },
+          response.headers,
+        ),
       });
     } catch (err) {
       logger.error(`Smart HTTP info/refs error: ${err}`);
@@ -122,11 +121,10 @@ export function createSmartHttpHandlers(options: SmartHttpOptions): SmartHttpHan
 
       return new Response(response.body, {
         status: response.status,
-        headers: {
-          "Content-Type": CONTENT_TYPES.uploadPackResult,
-          "Cache-Control": "no-cache",
-          ...response.headers,
-        },
+        headers: mergeHeaders(
+          { "Content-Type": CONTENT_TYPES.uploadPackResult, "Cache-Control": "no-cache" },
+          response.headers,
+        ),
       });
     } catch (err) {
       logger.error(`Smart HTTP git-upload-pack error: ${err}`);
@@ -142,6 +140,19 @@ export function createSmartHttpHandlers(options: SmartHttpOptions): SmartHttpHan
     handleInfoRefs,
     handleUploadPack,
   };
+}
+
+/**
+ * Merge default headers with CGI headers. CGI header names are lower case, so
+ * a plain object spread keeps both names and the response gets a duplicate
+ * `Content-Type`, which git rejects.
+ */
+function mergeHeaders(defaults: Record<string, string>, cgi: Record<string, string>): Headers {
+  const headers = new Headers(defaults);
+  for (const [name, value] of Object.entries(cgi)) {
+    headers.set(name, value);
+  }
+  return headers;
 }
 
 /**

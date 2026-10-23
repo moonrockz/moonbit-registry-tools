@@ -38,7 +38,7 @@ export async function loadConfig(configPath?: string): Promise<RegistryConfig> {
 
   if (!path || !existsSync(path)) {
     logger.debug("No config file found, using defaults");
-    return { ...DEFAULT_CONFIG };
+    return structuredClone(DEFAULT_CONFIG);
   }
 
   logger.debug(`Loading config from ${path}`);
@@ -129,6 +129,15 @@ function generateToml(config: RegistryConfig): string {
   lines.push(`port = ${config.server.port}`);
   lines.push(`base_url = "${config.server.base_url}"`);
   lines.push("");
+
+  if (config.server.smart_http) {
+    lines.push("[server.smart_http]");
+    lines.push(`enabled = ${config.server.smart_http.enabled}`);
+    if (config.server.smart_http.git_http_backend_path) {
+      lines.push(`git_http_backend_path = "${config.server.smart_http.git_http_backend_path}"`);
+    }
+    lines.push("");
+  }
 
   lines.push("[git]");
   lines.push(`remote_url = "${config.git.remote_url}"`);

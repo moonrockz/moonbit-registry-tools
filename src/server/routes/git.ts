@@ -35,16 +35,12 @@ export function createGitRoutes(registry: Registry, options: GitRoutesOptions = 
     const url = new URL(request.url);
     const service = url.searchParams.get("service");
 
-    if (service) {
-      // Smart HTTP request
-      if (smartHttpHandlers?.available) {
-        return smartHttpHandlers.handleInfoRefs(request, service);
-      }
-      // Smart HTTP not available
-      return new Response("Smart HTTP not implemented", { status: 501 });
+    if (service && smartHttpHandlers?.available) {
+      return smartHttpHandlers.handleInfoRefs(request, service);
     }
 
-    // Dumb HTTP: serve info/refs file
+    // Dumb HTTP: serve info/refs file. Git clients that asked for a smart
+    // service fall back to the dumb protocol when they get a plain reply.
     const refsPath = join(indexDir, ".git", "info", "refs");
     return serveFile(refsPath, "text/plain");
   }

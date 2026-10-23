@@ -34,6 +34,14 @@ export class Registry {
     this.dependencyResolver = new DependencyResolver(this.indexManager, this.packageStore);
   }
 
+  /** Rebuild components that hold a source manager after a source change */
+  private reloadSources(): void {
+    this.sourceManager = new SourceManager(this.config);
+    this.indexManager = new IndexManager(this.config, this.sourceManager);
+    this.packageStore = new PackageStore(this.config, this.sourceManager);
+    this.dependencyResolver = new DependencyResolver(this.indexManager, this.packageStore);
+  }
+
   /** Load a registry from a directory */
   static async load(dir?: string): Promise<Registry> {
     const rootDir = dir ? resolve(dir) : process.cwd();
@@ -63,11 +71,12 @@ export class Registry {
     const rootDir = resolve(dir);
     await fs.ensureDir(rootDir);
 
-    // Create config
+    // Create config from a deep copy, so changes do not leak into DEFAULT_CONFIG
+    const defaults = structuredClone(DEFAULT_CONFIG);
     const config: RegistryConfig = {
-      ...DEFAULT_CONFIG,
+      ...defaults,
       registry: {
-        ...DEFAULT_CONFIG.registry,
+        ...defaults.registry,
         name: name ?? "local-registry",
         data_dir: join(rootDir, "data"),
       },
@@ -113,11 +122,12 @@ export class Registry {
     // Log warnings for skipped dependencies
     this.dependencyResolver.logSkippedWarnings(resolution, options.quiet);
 
-    // Download packages
-    const toDownload = Array.from(resolution.packages).filter((p) => !resolution.cached.has(p));
+    // Visit every package, also cached ones: a package with one cached version
+    // can have new versions upstream. downloadPackage skips files it already has.
+    const toDownload = Array.from(resolution.packages);
 
     logger.info(
-      `Found ${resolution.packages.size} packages to mirror (${toDownload.length} to download)`,
+      `Found ${resolution.packages.size} packages to mirror (${resolution.cached.size} already cached)`,
     );
 
     let downloaded = 0;
@@ -138,10 +148,9 @@ export class Registry {
         continue;
       }
 
-      // Download all non-yanked versions
+      // Download yanked versions too: moon still selects them (it only warns
+      // that they are deprecated), so a mirror without them breaks builds.
       for (const version of metadata.versions) {
-        if (version.yanked) continue;
-
         try {
           await this.packageStore.downloadPackage(
             pkgId.username,
@@ -159,6 +168,18 @@ export class Registry {
         }
       }
     }
+
+    // Publish the index entries of every resolved package where moon reads them.
+    // Versions whose archive failed to download are left out.
+    const published = await this.indexManager.publishFromSource(
+      Array.from(resolution.packages),
+      source.name,
+      (username, name, version) => this.packageStore.hasPackage(username, name, version),
+    );
+    if (published > 0) {
+      await this.indexManager.commit(`Mirror ${published} packages from ${source.name}`);
+    }
+    await this.indexManager.updateServerInfo();
 
     logger.success(`Mirrored ${downloaded} package versions (${failed} failed)`);
   }
@@ -223,8 +244,7 @@ export class Registry {
 
     this.config.sources.push(source);
 
-    // Reinitialize source manager with updated config
-    this.sourceManager = new SourceManager(this.config);
+    this.reloadSources();
   }
 
   /** Remove a source from configuration */
@@ -245,8 +265,7 @@ export class Registry {
       this.config.default_source = undefined;
     }
 
-    // Reinitialize source manager with updated config
-    this.sourceManager = new SourceManager(this.config);
+    this.reloadSources();
   }
 
   /** Set the default source */
@@ -256,6 +275,7 @@ export class Registry {
       throw new Error(`Source '${name}' not found`);
     }
     this.config.default_source = name;
+    this.reloadSources();
   }
 
   /** Enable or disable a source */
@@ -271,8 +291,7 @@ export class Registry {
 
     source.enabled = enabled;
 
-    // Reinitialize source manager with updated config
-    this.sourceManager = new SourceManager(this.config);
+    this.reloadSources();
   }
 
   /** Save configuration to file */
