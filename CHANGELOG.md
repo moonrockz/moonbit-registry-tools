@@ -81,6 +81,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   subcommand, so the CLI stopped with `unknown option '-d'`. The option now comes after the
   subcommand.
 
+- `download_url` did not change the zip URL of the `mooncakes` preset or of the legacy
+  `[upstream]` source, because both had a `package_url_pattern` with
+  `https://download.mooncakes.io`. The preset and the legacy source no longer have this pattern,
+  and the pattern that `source add --from-preset mooncakes` wrote before is ignored. The zip URL
+  does not change when `download_url` is not set.
+
+- In proxy mode, `mirror` on a new registry fetched only the index of the source. The served
+  index had no commit, so a copy of the registry answered `503` for `/git/index` when upstream
+  was not available. `mirror --proxy` now makes the served index when it is not ready yet, and
+  caches `symbols.zip`. When the served index is ready, `mirror` does not change it.
+
 ### Documentation
 
 - The `mirror-registry.yml` and `private-registry.yml` workflow templates no longer deploy the
