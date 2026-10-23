@@ -3,6 +3,7 @@
  */
 
 import type { Command } from "commander";
+import { resolveProxyConfig } from "../../config/schema.ts";
 import { Registry } from "../../core/registry.ts";
 import type { MirrorOptions } from "../../core/types.ts";
 import logger, { setQuiet } from "../../utils/logger.ts";
@@ -15,6 +16,7 @@ interface MirrorCommandOptions {
   dir?: string;
   source?: string;
   prebuild?: boolean;
+  proxy?: boolean;
 }
 
 export function registerMirrorCommand(program: Command): void {
@@ -27,6 +29,7 @@ export function registerMirrorCommand(program: Command): void {
     .option("-d, --dir <path>", "Registry directory (default: current directory)")
     .option("-s, --source <name>", "Source to mirror from (uses default if not specified)")
     .option("--prebuild", "Also fetch the prebuilt wasm of executable packages")
+    .option("--proxy", "Proxy mode: fill the cache only and do not change the served index")
     .action(async (patterns: string[], options: MirrorCommandOptions) => {
       try {
         if (options.quiet) {
@@ -35,6 +38,9 @@ export function registerMirrorCommand(program: Command): void {
 
         const registryPath = resolvePath(options.dir ?? ".");
         const registry = await Registry.load(registryPath);
+        if (options.proxy) {
+          registry.config.proxy = { ...resolveProxyConfig(registry.config), enabled: true };
+        }
 
         let patternsToUse = patterns;
         if (!options.full && patterns.length === 0) {

@@ -254,6 +254,133 @@ moonbit-registry sync --push
 moonbit-registry sync --pull
 ```
 
+## Proxy Mode
+
+In proxy mode, `serve` is a caching proxy for an upstream registry. Use it on your machine or
+on your LAN when you want the full registry but do not want to download it all first.
+
+- The served index is a full copy of the index of the default source: all packages and all
+  versions, with each line copied as it is. The proxy refreshes the index when it starts and
+  then on `index_refresh_interval` (default 10 minutes). Requests do not wait for a refresh.
+  If a refresh fails, the proxy logs a warning and continues to serve the last index.
+- The proxy downloads a package zip, a prebuilt wasm file or `symbols.zip` from upstream on
+  the first request. Then it keeps the file in its cache and serves it from there.
+- The proxy compares each zip with the SHA-256 checksum in the index, and each prebuilt wasm
+  file with the `.sha256` file from upstream. If a checksum is different, the proxy does not
+  keep the file and sends `502 Bad Gateway`. If upstream does not have the file, it sends
+  `404`.
+- When many clients ask for the same missing file at the same time, the proxy downloads it
+  only once.
+
+Mirror mode (without `--proxy`) does not change: the served index has only the packages that
+you mirrored.
+
+### Start a proxy
+
+Upstream mooncakes.io:
+
+```bash
+moonbit-registry init my-proxy
+cd my-proxy
+moonbit-registry source add mooncakes --from-preset mooncakes
+moonbit-registry source default mooncakes
+moonbit-registry serve --proxy --port 8080
+```
+
+Upstream index mirror on GitHub (`moonrockz/mooncakes-index`), with downloads from
+download.mooncakes.io:
+
+```bash
+moonbit-registry source add moonrockz --from-preset moonrockz
+moonbit-registry source default moonrockz
+moonbit-registry serve --proxy --port 8080
+```
+
+You can also set proxy mode in `registry.toml` instead of `--proxy`:
+
+```toml
+default_source = "mooncakes"
+
+[[sources]]
+name = "mooncakes"
+type = "mooncakes"
+url = "https://mooncakes.io"
+index_url = "https://mooncakes.io/git/index"   # or https://github.com/moonrockz/mooncakes-index.git
+download_url = "https://download.mooncakes.io" # zips and prebuilt wasm
+symbols_url = "https://download.mooncakes.io/symbols.zip"
+
+[proxy]
+enabled = true
+index_refresh_interval = "10m"
+symbols_max_age = "1d"
+```
+
+`default_source` is a top-level key. Put it before the first `[table]`, or TOML puts it in
+that table.
+
+To chain proxies, add the upstream proxy as a source of type `moonbit-registry`, with `url`
+set to its address and `index_url` set to `<url>/git/index`.
+
+### Configure moon
+
+With `$MOON_HOME/config.json` (default `~/.moon/config.json`):
+
+```json
+{
+  "api": "https://mooncakes.io",
+  "index": "http://localhost:8080/git/index",
+  "download": "http://localhost:8080"
+}
+```
+
+`api` is for search and publishing. The proxy does not serve it, so keep the mooncakes.io
+value.
+
+With the environment variable (only when `$MOON_HOME/config.json` does not exist):
+
+```bash
+export MOONCAKES_REGISTRY=http://localhost:8080
+```
+
+Then use moon as usual: `moon update`, `moon add`, `moon build`, `moonx`.
+
+### Fill the cache before you go offline
+
+In proxy mode, `mirror` downloads the zips of the packages that match the patterns, and of
+their dependencies, into the cache. It does not change the served index. Set
+`[proxy] enabled = true` in `registry.toml`, or give `--proxy` to `mirror` too.
+`--prebuild` also downloads the prebuilt wasm of the executable packages in these zips, when
+upstream has them (`moonx` uses these files). Packages that have no prebuild upstream are
+skipped.
+
+```bash
+moonbit-registry mirror 'moonbitlang/*' --proxy --prebuild
+```
+
+You can run this while the proxy runs.
+
+### Offline use
+
+When upstream is not available, the proxy serves the last index and all files in its cache.
+A request for a file that is not in the cache gets `502` (or `404`). An old `symbols.zip`
+is served when the proxy cannot get a new one.
+
+### Disk use
+
+All data is below `data_dir`:
+
+| Path | Content |
+|------|---------|
+| `index/` | Served index (git), with the upstream clone in `index/sources/<source>/` |
+| `packages/<owner>/<name>/<version>.zip` | Cached zips |
+| `prebuild/<owner>/<name>@<version>/...` | Cached prebuilt wasm and `.sha256` files |
+| `symbols/symbols.zip` | Cached symbol database |
+
+The index takes some tens of MB. The cache grows only with the files that clients ask for.
+For scale: all zips of mooncakes.io together are about 16 GB, and most projects use a very
+small part of them. To clear the cache, stop the proxy and delete `packages/`, `prebuild/`
+and `symbols/`.
+
 ## Configuration
 
 Configuration is stored in `registry.toml`. See `registry.example.toml` for all available options.
@@ -261,6 +388,9 @@ Configuration is stored in `registry.toml`. See `registry.example.toml` for all 
 ### Key Configuration Options
 
 ```toml
+# Top-level keys come before the first table
+default_source = "mooncakes"
+
 [registry]
 name = "my-company-registry"
 data_dir = "./data"
@@ -272,6 +402,7 @@ type = "mooncakes"
 url = "https://mooncakes.io"
 index_url = "https://mooncakes.io/git/index"
 index_type = "git"
+download_url = "https://download.mooncakes.io"  # Optional: zips and prebuilt wasm
 enabled = true
 priority = 100
 
@@ -287,8 +418,6 @@ priority = 50
 type = "bearer"
 token = "${PARTNER_REGISTRY_TOKEN}"  # Environment variable
 
-default_source = "mooncakes"
-
 [mirror]
 auto_sync = false
 sync_interval = "1h"
@@ -298,6 +427,11 @@ packages = []  # Default patterns to mirror
 host = "0.0.0.0"
 port = 8080
 base_url = "http://localhost:8080"
+
+[proxy]
+enabled = false  # true (or serve --proxy) for proxy mode
+index_refresh_interval = "10m"
+symbols_max_age = "1d"
 
 [git]
 remote_url = ""  # Optional: push index to remote
@@ -332,7 +466,9 @@ When running `moonbit-registry serve`, the following endpoints are available:
 | `GET /health` | Health check |
 | `GET /git/index` | Git index (Smart HTTP, with dumb HTTP fallback) |
 | `GET /user/{username}/{package}/{version}.zip` | Download package (also accepts the `%2F` form that moon sends) |
-| `GET /symbols.zip` | Redirect to the mooncakes.io symbol database (mooncakes sources only) |
+| `GET /symbols.zip` | Redirect to the mooncakes.io symbol database (mooncakes sources only). In proxy mode: cached copy |
+| `GET /prebuild/{username}/{package}@{version}/{path}/{file}.wasm` | Prebuilt wasm, and the same URL with `.sha256`. In proxy mode, downloaded on a miss |
+| `GET /assets/{username}/{package}@{version}/{path}/{file}.wasm` | The same prebuilt wasm, at the path of legacy clients (`MOONCAKES_REGISTRY`) |
 | `GET /user/{username}/{package}` | Package metadata (JSON) |
 
 ## Getting Started

@@ -35,6 +35,17 @@ describe("CLI Commands", () => {
     });
   });
 
+  describe("proxy options", () => {
+    it("should offer --proxy on serve and --proxy and --prebuild on mirror", async () => {
+      const serveHelp = await $`bun ${cliPath} serve --help`.text();
+      expect(serveHelp).toContain("--proxy");
+
+      const mirrorHelp = await $`bun ${cliPath} mirror --help`.text();
+      expect(mirrorHelp).toContain("--proxy");
+      expect(mirrorHelp).toContain("--prebuild");
+    });
+  });
+
   describe("moonbit-registry --version", () => {
     it("should show version", async () => {
       const result = await $`bun ${cliPath} --version`.text();

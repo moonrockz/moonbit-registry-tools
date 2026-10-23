@@ -66,6 +66,12 @@ export async function saveConfig(config: RegistryConfig, configPath: string): Pr
 function generateToml(config: RegistryConfig): string {
   const lines: string[] = [];
 
+  // Top-level keys must come before the first table, or TOML puts them in it
+  if (config.default_source && config.sources?.length) {
+    lines.push(`default_source = "${config.default_source}"`);
+    lines.push("");
+  }
+
   lines.push("[registry]");
   lines.push(`name = "${config.registry.name}"`);
   lines.push(`data_dir = "${config.registry.data_dir}"`);
@@ -115,11 +121,6 @@ function generateToml(config: RegistryConfig): string {
           lines.push(`password = "${source.auth.password}"`);
         }
       }
-      lines.push("");
-    }
-
-    if (config.default_source) {
-      lines.push(`default_source = "${config.default_source}"`);
       lines.push("");
     }
   }

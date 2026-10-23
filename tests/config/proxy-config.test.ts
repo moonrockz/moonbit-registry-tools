@@ -159,3 +159,30 @@ describe("source download URLs", () => {
     expect(preset.download_url).toBe("https://download.mooncakes.io");
   });
 });
+
+describe("default_source in the saved config", () => {
+  let tempDir: string;
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "moonbit-default-source-"));
+  });
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it("should load back as the default source", async () => {
+    const source = { url: "https://mooncakes.io", index_url: "https://mooncakes.io/git/index" };
+    const config = validateConfig({
+      sources: [
+        { name: "first", ...source },
+        { name: "second", ...source },
+      ],
+      default_source: "second",
+    });
+    const path = join(tempDir, "registry.toml");
+    await saveConfig(config, path);
+
+    const loaded = await loadConfig(path);
+    expect(loaded.default_source).toBe("second");
+    expect(new SourceManager(loaded).getDefaultSourceName()).toBe("second");
+  });
+});

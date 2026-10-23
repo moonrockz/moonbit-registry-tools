@@ -21,6 +21,7 @@ Practical examples and patterns for common use cases.
 | [Multiple Sources]({{ site.baseurl }}/recipes/multiple-sources) | Mirror from multiple registries |
 | [Team Registry]({{ site.baseurl }}/recipes/team-registry) | Share a registry across your team |
 | [Authentication]({{ site.baseurl }}/recipes/authentication) | Connect to private registries |
+| [Caching Proxy]({{ site.baseurl }}/recipes/proxy-mode) | Serve all of mooncakes.io and cache files on first use |
 
 ---
 
@@ -33,10 +34,10 @@ Practical examples and patterns for common use cases.
 moonbit-registry init [path] [--name <name>]
 
 # Mirror packages
-moonbit-registry mirror <patterns...> [--full] [--strict] [-s <source>]
+moonbit-registry mirror <patterns...> [--full] [--strict] [-s <source>] [--proxy] [--prebuild]
 
 # Serve registry
-moonbit-registry serve [--port <port>] [--host <host>]
+moonbit-registry serve [--port <port>] [--host <host>] [--proxy]
 
 # Manage sources
 moonbit-registry source list
