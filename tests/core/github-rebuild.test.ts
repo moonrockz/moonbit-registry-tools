@@ -100,27 +100,31 @@ describe("module files on disk", () => {
   });
 
   it.skipIf(process.platform === "win32")(
-    "should refuse links and unsafe paths in the tag tree",
+    "should follow links inside the tag and refuse links out of it",
     async () => {
       const outside = join(dir, "outside");
       await mkdir(outside, { recursive: true });
       await writeFile(join(outside, "a.mbt"), "a");
-      await writeFile(join(outside, "moon.mod"), "m");
       const manifest = createManifest(
         "alice/tiny",
         "0.1.0",
-        makeZip({ "moon.mod": "m", "src/a.mbt": "a" }),
+        makeZip({ "README.md": "r", "src/a.mbt": "a", "src/b": "b" }),
       );
       manifest.entries.push({ path: "../outside/a.mbt", sha256: "0", size: 1 });
-      const tree = join(dir, "tree");
-      await mkdir(tree, { recursive: true });
-      await symlink(join(outside, "moon.mod"), join(tree, "moon.mod"));
-      await symlink(outside, join(tree, "src"));
-      expect(await compareTreeWithManifest(tree, manifest)).toEqual([
-        "not a regular file in the tag: moon.mod",
-        "outside the module in the tag: src/a.mbt",
+      const tag = join(dir, "tag");
+      const tree = join(tag, "module");
+      await mkdir(join(tree, "src", "b"), { recursive: true });
+      // moon package stores the target of a link, as for README.md -> README.mbt.md
+      await writeFile(join(tag, "README.mbt.md"), "r");
+      await symlink(join(tag, "README.mbt.md"), join(tree, "README.md"));
+      await symlink(join(outside, "a.mbt"), join(tree, "src", "a.mbt"));
+      expect(await compareTreeWithManifest(tree, manifest, tag)).toEqual([
+        "outside the tag: src/a.mbt",
+        "not a regular file in the tag: src/b",
         "unsafe path: ../outside/a.mbt",
       ]);
+      // Without the tag root, the module directory is the limit
+      expect(await compareTreeWithManifest(tree, manifest)).toContain("outside the tag: README.md");
     },
   );
 });

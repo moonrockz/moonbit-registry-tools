@@ -14,7 +14,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { lstat, readFile, readdir, realpath } from "node:fs/promises";
+import { readFile, readdir, realpath, stat } from "node:fs/promises";
 import { join, sep } from "node:path";
 import fs from "../utils/fs.ts";
 import { reorderZip, zipEntryDigests } from "../utils/zip.ts";
@@ -139,15 +139,19 @@ function sha256Hex(data: Uint8Array): string {
 
 /**
  * Compare a module directory with a manifest before anything runs on it.
- * Each manifest entry must be a regular file inside the directory, with the
- * same size and SHA-256. Returns one line per problem; other files in the
- * directory are not problems.
+ * Each manifest entry must be a regular file with the same size and SHA-256.
+ * A link is followed, as moon package does (some repositories link
+ * `README.md` to `README.mbt.md`), but it must stay inside `treeRoot`, the
+ * unpacked tag. Returns one line per problem; other files in the directory
+ * are not problems.
  */
 export async function compareTreeWithManifest(
   moduleDir: string,
   manifest: ArchiveManifest,
+  treeRoot: string = moduleDir,
 ): Promise<string[]> {
-  const root = await realpath(moduleDir);
+  const module = await realpath(moduleDir);
+  const root = await realpath(treeRoot);
   const problems: string[] = [];
   for (const entry of manifest.entries) {
     if (entry.path.endsWith("/")) continue;
@@ -159,17 +163,16 @@ export async function compareTreeWithManifest(
       problems.push(`unsafe path: ${entry.path}`);
       continue;
     }
-    const path = join(root, ...parts);
+    const path = join(module, ...parts);
     let data: Uint8Array;
     try {
-      const info = await lstat(path);
-      if (!info.isFile()) {
-        problems.push(`not a regular file in the tag: ${entry.path}`);
+      // The file, or a parent directory, can be a link out of the tag
+      if (!(await realpath(path)).startsWith(root + sep)) {
+        problems.push(`outside the tag: ${entry.path}`);
         continue;
       }
-      // A parent directory can be a link out of the tree
-      if (!(await realpath(path)).startsWith(root + sep)) {
-        problems.push(`outside the module in the tag: ${entry.path}`);
+      if (!(await stat(path)).isFile()) {
+        problems.push(`not a regular file in the tag: ${entry.path}`);
         continue;
       }
       data = new Uint8Array(await readFile(path));
@@ -275,7 +278,7 @@ export async function rebuildFromGitHub(
     }
     const relative = root.slice(sourceDir.length).split(/[\\/]/).filter(Boolean).slice(1).join("/");
 
-    const treeProblems = await compareTreeWithManifest(root, request.manifest);
+    const treeProblems = await compareTreeWithManifest(root, request.manifest, sourceDir);
     if (treeProblems.length > 0) {
       throw new RebuildError(
         `Tag ${tarball.tag} does not have the files of the published ${id}, so moon was not run`,

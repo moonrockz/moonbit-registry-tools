@@ -138,8 +138,9 @@ When the download of a zip fails (no network, `5xx` or `404`), the proxy:
 4. Finds the directory whose `moon.mod` or `moon.mod.json` has the name of the module. This
    can be a subdirectory of the repository.
 5. Compares the files of the tag with the manifest. Each file of the published zip must be in
-   the tag, as a regular file, with the same SHA-256. When one is missing or different, the
-   proxy stops here and does not run moon. Other files in the tag are allowed.
+   the tag, as a regular file, with the same SHA-256. A link is followed (as `moon package`
+   does), but it must stay inside the tag. When a file is missing or different, the proxy
+   stops here and does not run moon. Other files in the tag are allowed.
 6. Runs `moon package` with the toolchain of the publish date.
 7. Compares each file of the result with the manifest, puts the entries in the published
    order, and computes the SHA-256 of the result.
@@ -178,8 +179,12 @@ gives the upstream `moonfmt.wasm` of `moonbitlang/parser@0.3.4`.
 - **Builds do not run commands from packages.** moon runs the `pre-build` commands of a
   package and the `scripts.postadd` command of a module, unless `MOON_IGNORE_PREBUILD` and
   `MOON_IGNORE_POSTADD` are set. The proxy sets both for each moon command (`update`,
-  `package`, `build`). The proxy logs the hooks that it finds in a module. A package that needs
-  the output of its pre-build can then fail to build; that fallback then sends `502`.
+  `package`, `build`). The proxy logs the hooks that it finds in a module (`pre-build`,
+  `rule(...)`, `build(...)`, `dev_build(...)`, `postadd`). A package that needs the output of
+  its pre-build can then fail to build; that fallback then sends `502`. This also applies to
+  the GitHub rebuild, because `moon package` checks the module, tests included. For example,
+  `moonbitlang/x@0.5.6` embeds test data with `dev_build(...)`, so it cannot be rebuilt.
+  A module that publishes its generated files (for example `moonbitlang/parser`) builds.
 - **Builds do not get the secrets of the proxy.** A child process (moon, moonup,
   `moon-wasm-opt`) gets only `PATH`, its own `HOME`, `MOON_HOME` and `MOONUP_HOME`,
   `MOONCAKES_REGISTRY`, the locale and temporary directory variables, the network proxy

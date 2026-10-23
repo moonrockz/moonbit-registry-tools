@@ -69,6 +69,13 @@ describe("findBuildHooks", () => {
     await mkdir(join(dir, "old"), { recursive: true });
     await writeFile(join(dir, "old", "moon.pkg.json"), '{ "pre-build": [] }');
     await writeFile(join(dir, "old", "moon.mod.json"), '{ "scripts": { "postadd": "x" } }');
+    // The rule form of moon.pkg, as in moonbitlang/x@0.5.6
+    await mkdir(join(dir, "time"), { recursive: true });
+    await writeFile(
+      join(dir, "time", "moon.pkg"),
+      'rule(\n  name: "embed",\n  command: ":embed -i $input -o $output",\n)\n\n' +
+        'dev_build(\n  rule: "embed",\n  input: "a.tzif",\n  output: "a_wbtest.mbt",\n)\n',
+    );
     // Build output is not source
     await mkdir(join(dir, "_build"), { recursive: true });
     await writeFile(join(dir, "_build", "moon.pkg.json"), '{ "pre-build": [] }');
@@ -77,6 +84,7 @@ describe("findBuildHooks", () => {
       "moon.mod: postadd",
       "old/moon.mod.json: postadd",
       "old/moon.pkg.json: pre-build",
+      "time/moon.pkg: pre-build",
     ]);
   });
 

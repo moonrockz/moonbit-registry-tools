@@ -404,7 +404,8 @@ moonup = "moonup"      # path of moonup (https://github.com/chawyehsu/moonup)
   moonup. When moonup is missing, the proxy logs one error and the fallbacks stay off.
 - **Package hooks and secrets.** Builds run with `MOON_IGNORE_PREBUILD=1` and
   `MOON_IGNORE_POSTADD=1`, so moon does not run the `pre-build` or `postadd` commands of the
-  code it builds. A package that needs its pre-build output can fail to build. The proxy does
+  code it builds. A package that needs its pre-build output can fail to build (or, for a
+  GitHub rebuild, fail `moon package`, which checks the tests too). The proxy does
   not run toolchains released before 2025-05-29, which do not know these variables, so
   versions that need such a toolchain cannot be rebuilt. Child processes get an environment
   from an allowlist: `GITHUB_TOKEN` and other secrets of the proxy are not passed.

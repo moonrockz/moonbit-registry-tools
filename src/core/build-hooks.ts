@@ -15,9 +15,14 @@ const SKIP_DIRS = new Set([".git", "_build", "target", ".mooncakes", "node_modul
 
 const MANIFEST_FILES = new Set(["moon.mod", "moon.mod.json", "moon.pkg", "moon.pkg.json"]);
 
-/** The JSON key or the moon.pkg / moon.mod option of each hook */
+/**
+ * The JSON keys and moon.pkg / moon.mod options of the hooks. The newer
+ * moon.pkg form declares pre-build steps with `rule(...)` and
+ * `build(...)` or `dev_build(...)` (for tests).
+ */
 const HOOKS: { name: string; pattern: RegExp }[] = [
   { name: "pre-build", pattern: /["']?pre-build["']?\s*[:=]/ },
+  { name: "pre-build", pattern: /^\s*(?:rule|build|dev_build)\s*\(/m },
   { name: "postadd", pattern: /["']?postadd["']?\s*[:=]/ },
 ];
 
@@ -36,8 +41,8 @@ export async function findBuildHooks(dir: string): Promise<string[]> {
       } else if (entry.isFile() && MANIFEST_FILES.has(entry.name)) {
         const text = await readFile(path, "utf8");
         const file = relative(dir, path).split(sep).join("/");
-        for (const hook of HOOKS) {
-          if (hook.pattern.test(text)) found.push(`${file}: ${hook.name}`);
+        for (const name of new Set(HOOKS.filter((h) => h.pattern.test(text)).map((h) => h.name))) {
+          found.push(`${file}: ${name}`);
         }
       }
     }
