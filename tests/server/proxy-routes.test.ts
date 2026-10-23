@@ -4,9 +4,9 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm, utimes } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Registry } from "../../src/core/registry.ts";
 import createServer from "../../src/server/index.ts";
 import { sha256 } from "../../src/utils/crypto.ts";
@@ -86,6 +86,19 @@ describe("Proxy routes", () => {
       expect(offline.status).toBe(200);
       expect(await offline.text()).toBe(APP_ZIP);
       expect(host.hitCount("/user/alice/app/1.0.0.zip")).toBe(1);
+    });
+
+    it("should fetch again a cached zip that does not match the index checksum", async () => {
+      // For example a corrupted file, or a file cached before proxy mode checked it
+      const path = registry.packageStore.getPackagePath("alice", "app", "1.0.0");
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, "corrupted bytes");
+
+      const response = await get("/user/alice/app/1.0.0.zip");
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe(APP_ZIP);
+      expect(host.hitCount("/user/alice/app/1.0.0.zip")).toBe(1);
+      expect(await readFile(path, "utf-8")).toBe(APP_ZIP);
     });
 
     it("should serve the legacy encoded zip path", async () => {
@@ -284,6 +297,29 @@ describe("Proxy routes", () => {
       await fresh.proxy.refreshIndex();
       const after = await freshHandler(new Request(`http://localhost${refs}`));
       expect(after.status).toBe(200);
+    });
+
+    it("should serve a committed index in the legacy layout before the refresh", async () => {
+      // IndexManager also reads `{owner}/{package}` files, without the user/ directory
+      const legacy = await Registry.init(join(tempDir, "legacy"));
+      const indexDir = legacy.indexManager.path;
+      await mkdir(join(indexDir, "alice"), { recursive: true });
+      await writeFile(
+        join(indexDir, "alice", "app"),
+        indexFile([{ name: "alice/app", version: "1.0.0", checksum: sha256(APP_ZIP), deps: {} }]),
+      );
+      await legacy.indexManager.commit("legacy index");
+
+      const restarted = await Registry.load(legacy.rootDir);
+      restarted.config.proxy = {
+        enabled: true,
+        index_refresh_interval: "10m",
+        symbols_max_age: "1d",
+      };
+      const restartedHandler = createServer(restarted, { port: 0 }).handler;
+
+      const response = await restartedHandler(new Request(`http://localhost${refs}`));
+      expect(response.status).toBe(200);
     });
 
     it("should serve the index of an earlier run before the refresh", async () => {

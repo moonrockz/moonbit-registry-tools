@@ -14,12 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `index_refresh_interval` (default `10m`) without blocking requests. When a refresh fails,
   the proxy logs a warning and serves the last index. Until the first refresh ends (and no
   index from an earlier run exists), `/git/index` answers `503` with `Retry-After`, so that a
-  client does not clone and keep an empty index.
+  client does not clone and keep an empty index. A committed index from an earlier run, in any
+  index layout, is served at once.
 - In proxy mode, the server downloads files from the default source on the first request and
   caches them: package zips (both URL forms), prebuilt wasm at `/prebuild/...` and the legacy
   `/assets/...` path (with the `.sha256` files), and `symbols.zip` (fresh for
   `symbols_max_age`, default `1d`; an old copy is served when upstream fails). Zips are
-  checked against the index checksum and wasm files against the upstream `.sha256`. A file
+  checked against the index checksum and wasm files against the upstream `.sha256`. A cached
+  zip is checked again against the current index checksum once per process; when it does not
+  match, the proxy deletes it and downloads it again. A file
   with a different checksum is not cached, and the client gets `502`. Concurrent requests for
   the same missing file share one download. Files are written to a temporary file and renamed.
 - Sources accept `download_url` (base URL for zips and prebuilt wasm) and `symbols_url`.

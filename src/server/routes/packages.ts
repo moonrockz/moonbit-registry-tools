@@ -18,9 +18,9 @@ export function createPackageRoutes(registry: Registry) {
     // Check if package exists locally
     let packagePath = registry.packageStore.getPackageFile(username, packageName, version);
 
-    if (!packagePath && registry.proxy.enabled) {
-      // Proxy mode: fetch only versions that the served index lists, and
-      // cache them only when they match the index checksum
+    if (registry.proxy.enabled) {
+      // Proxy mode: serve only versions that the served index lists, and only
+      // bytes that match the index checksum (cached or fetched)
       const metadata = await registry.getPackage(username, packageName);
       const checksum = metadata?.versions.find((v) => v.version === version)?.checksum;
       if (!checksum) {

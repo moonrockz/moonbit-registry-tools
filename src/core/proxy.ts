@@ -8,7 +8,7 @@
 
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { readFile, stat } from "node:fs/promises";
+import { readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { DATA_DIRS } from "../config/defaults.ts";
 import { resolveProxyConfig } from "../config/schema.ts";
@@ -44,6 +44,8 @@ export class ProxyCache {
   private refreshing: Promise<boolean> | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private indexRefreshed = false;
+  /** Cached zips whose bytes matched this index checksum in this process */
+  private verifiedZips = new Map<string, string>();
 
   constructor(registry: Registry) {
     this.registry = registry;
@@ -92,11 +94,15 @@ export class ProxyCache {
   // Index
 
   /**
-   * Whether the served index has content: from an earlier run, or from a
-   * refresh in this process. Before that, a clone gets an empty index.
+   * Whether the served index has content: a commit with files from an earlier
+   * run (any index layout), or a refresh in this process. Before that, a
+   * clone gets an empty index.
    */
   get indexReady(): boolean {
-    return this.indexRefreshed || existsSync(join(this.registry.indexManager.path, "user"));
+    if (!this.indexRefreshed && hasCommittedFiles(this.registry.indexManager.path)) {
+      this.indexRefreshed = true;
+    }
+    return this.indexRefreshed;
   }
 
   /**
@@ -206,24 +212,34 @@ export class ProxyCache {
     sourceName?: string,
   ): Promise<string> {
     const path = this.registry.packageStore.getPackagePath(owner, name, version);
-    if (existsSync(path)) return path;
+    const expected = checksum.toLowerCase();
+    if (this.verifiedZips.get(path) === expected && existsSync(path)) return path;
 
     return this.singleFlight(path, async () => {
-      if (existsSync(path)) return path;
-      const source = this.source(sourceName);
       const id = `${owner}/${name}@${version}`;
+      if (existsSync(path)) {
+        // Check a cached zip once per process against the current index checksum
+        if (sha256Hex(await readFile(path)) === expected) {
+          this.verifiedZips.set(path, expected);
+          return path;
+        }
+        logger.warn(`Cached ${id} does not match the index checksum, fetching it again`);
+        await rm(path, { force: true });
+      }
+      const source = this.source(sourceName);
       const url = this.registry.sourceManager.buildPackageUrl(source, owner, name, version);
       logger.info(`Proxy miss: fetching ${id} from ${source.name}`);
 
       const data = await this.download(url, source);
       const actual = sha256Hex(data);
-      if (actual !== checksum.toLowerCase()) {
+      if (actual !== expected) {
         throw new ProxyError(
           `Checksum mismatch for ${id}: index has ${checksum}, upstream sent ${actual}`,
           502,
         );
       }
       await fs.writeFileAtomic(path, data);
+      this.verifiedZips.set(path, expected);
       logger.info(`Proxy cached ${id} (${data.length} bytes)`);
       return path;
     });
@@ -356,6 +372,16 @@ function parseSha256(data: Uint8Array): string | null {
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/** Whether a git repository has a HEAD commit with at least one file */
+function hasCommittedFiles(dir: string): boolean {
+  const result = Bun.spawnSync(["git", "ls-tree", "--name-only", "HEAD"], {
+    cwd: dir,
+    stdout: "pipe",
+    stderr: "ignore",
+  });
+  return result.exitCode === 0 && result.stdout.toString().trim() !== "";
 }
 
 export default ProxyCache;
