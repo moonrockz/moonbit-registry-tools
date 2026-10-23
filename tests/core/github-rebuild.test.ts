@@ -3,16 +3,18 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { unpackZip } from "../../src/core/fallback.ts";
 import {
+  compareTreeWithManifest,
   findModuleRoot,
   parseGitHubRepository,
   readModuleName,
   tagCandidates,
 } from "../../src/core/github-rebuild.ts";
+import { createManifest } from "../../src/core/manifest.ts";
 import { makeZip } from "../helpers/fake-upstream.ts";
 
 describe("parseGitHubRepository", () => {
@@ -78,4 +80,47 @@ describe("module files on disk", () => {
       /outside/,
     );
   });
+
+  it("should compare a tag tree with a manifest before moon runs", async () => {
+    const files = { "moon.mod": 'name = "alice/tiny"\n', "src/a.mbt": "fn a() -> Int { 1 }\n" };
+    const manifest = createManifest("alice/tiny", "0.1.0", makeZip(files));
+    const tree = join(dir, "tree");
+    await mkdir(join(tree, "src"), { recursive: true });
+    for (const [path, content] of Object.entries(files)) await writeFile(join(tree, path), content);
+    // Extra files are allowed: moon package output is checked later
+    await writeFile(join(tree, "extra.txt"), "x");
+    expect(await compareTreeWithManifest(tree, manifest)).toEqual([]);
+
+    await writeFile(join(tree, "src", "a.mbt"), "fn a() -> Int { 2 }\n");
+    await rm(join(tree, "moon.mod"));
+    const problems = await compareTreeWithManifest(tree, manifest);
+    expect(problems).toHaveLength(2);
+    expect(problems[0]).toBe("missing in the tag: moon.mod");
+    expect(problems[1]).toStartWith("content differs: src/a.mbt");
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "should refuse links and unsafe paths in the tag tree",
+    async () => {
+      const outside = join(dir, "outside");
+      await mkdir(outside, { recursive: true });
+      await writeFile(join(outside, "a.mbt"), "a");
+      await writeFile(join(outside, "moon.mod"), "m");
+      const manifest = createManifest(
+        "alice/tiny",
+        "0.1.0",
+        makeZip({ "moon.mod": "m", "src/a.mbt": "a" }),
+      );
+      manifest.entries.push({ path: "../outside/a.mbt", sha256: "0", size: 1 });
+      const tree = join(dir, "tree");
+      await mkdir(tree, { recursive: true });
+      await symlink(join(outside, "moon.mod"), join(tree, "moon.mod"));
+      await symlink(outside, join(tree, "src"));
+      expect(await compareTreeWithManifest(tree, manifest)).toEqual([
+        "not a regular file in the tag: moon.mod",
+        "outside the module in the tag: src/a.mbt",
+        "unsafe path: ../outside/a.mbt",
+      ]);
+    },
+  );
 });

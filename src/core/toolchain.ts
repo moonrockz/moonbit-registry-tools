@@ -8,8 +8,17 @@
  * GitHub releases of chawyehsu/moonbit-binaries, which moonup downloads from.
  *
  * `moonup install` writes shims into `$MOON_HOME/bin` and replaces
- * `$MOON_HOME/lib`, so builds use a MOON_HOME of their own below the work
- * directory, never the MOON_HOME of the user.
+ * `$MOON_HOME/lib`, so installs use a MOON_HOME of their own below the work
+ * directory, never the MOON_HOME of the user. moon finds the core library
+ * next to its own binary, so each run gets a new, empty MOON_HOME for its
+ * registry index and cache, and concurrent runs share nothing.
+ *
+ * Builds run code from the registry, which nobody has checked. moon runs the
+ * `pre-build` commands of packages and the `postadd` script of modules unless
+ * MOON_IGNORE_PREBUILD and MOON_IGNORE_POSTADD are set. Every child gets both,
+ * and an environment from an allowlist, without the secrets of the proxy.
+ * Toolchains that do not know MOON_IGNORE_PREBUILD (released before
+ * 2025-05-29) are refused.
  */
 
 import { existsSync } from "node:fs";
@@ -53,6 +62,92 @@ const DEFAULT_DIST_SERVER = "https://moonup.csu.moe/v3";
 const DEFAULT_RELEASES_API = "https://api.github.com/repos/chawyehsu/moonbit-binaries/releases";
 const RELEASES_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const RUN_TIMEOUT_MS = 15 * 60 * 1000;
+
+/**
+ * moon added MOON_IGNORE_PREBUILD on 2025-05-29 (moonbitlang/moon#836), and
+ * MOON_IGNORE_POSTADD on 2025-04-11 (moonbitlang/moon#744). The first
+ * toolchain with both is 0.1.20250529+8a98c8e02.
+ */
+export const MIN_TOOLCHAIN_DATE = "2025-05-29T00:00:00Z";
+
+/** Turn off the hooks that run commands from packages */
+export const HOOK_ENV: Readonly<Record<string, string>> = {
+  MOON_IGNORE_PREBUILD: "1",
+  MOON_IGNORE_POSTADD: "1",
+};
+
+/** Variables that children get from the environment of the proxy, when set */
+const PASS_ENV = [
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "TZ",
+  "TMPDIR",
+  "TEMP",
+  "TMP",
+  // Network settings: moonup downloads toolchains, old moon downloads dependencies
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "ALL_PROXY",
+  "NO_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "all_proxy",
+  "no_proxy",
+  "SSL_CERT_FILE",
+  "SSL_CERT_DIR",
+  "MOONUP_DIST_SERVER",
+];
+
+/** Windows programs need these to start */
+const PASS_ENV_WINDOWS = [
+  "SystemRoot",
+  "SystemDrive",
+  "windir",
+  "ComSpec",
+  "PATHEXT",
+  "PROCESSOR_ARCHITECTURE",
+  "NUMBER_OF_PROCESSORS",
+  "ProgramData",
+  "ProgramFiles",
+  "ProgramFiles(x86)",
+  "CommonProgramFiles",
+];
+
+/**
+ * The environment of a child process: an allowlist of the proxy's variables,
+ * then the variables that the proxy sets. Nothing else gets through, so
+ * GITHUB_TOKEN and other secrets of the proxy stay in the proxy.
+ */
+export function childEnvironment(
+  vars: { path: string; home: string } & Record<string, string>,
+  source: Record<string, string | undefined> = process.env,
+  platform: string = process.platform,
+): Record<string, string> {
+  const env: Record<string, string> = {};
+  const windows = platform === "win32";
+  // Windows names are not case-sensitive
+  const lookup = windows
+    ? new Map(Object.entries(source).map(([key, value]) => [key.toUpperCase(), value]))
+    : null;
+  for (const name of windows ? [...PASS_ENV, ...PASS_ENV_WINDOWS] : PASS_ENV) {
+    const value = lookup ? lookup.get(name.toUpperCase()) : source[name];
+    if (value !== undefined) env[name] = value;
+  }
+  const { path, home, ...rest } = vars;
+  env.PATH = path;
+  env.HOME = home;
+  if (windows) env.USERPROFILE = home;
+  return { ...env, ...rest, ...HOOK_ENV };
+}
+
+/** A toolchain that the proxy does not run */
+export class ToolchainRefused extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ToolchainRefused";
+  }
+}
 
 /** The newest toolchain released before a publish time, or null */
 export function selectToolchain(createdAt: string, releases: ToolchainRelease[]): string | null {
@@ -117,8 +212,16 @@ function stripV(version: string): string {
 }
 
 function dateFromVersion(version: string): string | null {
-  const match = version.match(/^0\.1\.(\d{4})(\d{2})(\d{2})(?:\+|$)/);
+  const match =
+    version.match(/^0\.1\.(\d{4})(\d{2})(\d{2})(?:\+|$)/) ??
+    version.match(/^nightly-(\d{4})-(\d{2})-(\d{2})$/);
   return match ? `${match[1]}-${match[2]}-${match[3]}T00:00:00Z` : null;
+}
+
+/** Whether a moon binary reads MOON_IGNORE_PREBUILD and MOON_IGNORE_POSTADD */
+async function binaryKnowsHookEnv(path: string): Promise<boolean> {
+  const data = await readFile(path);
+  return Object.keys(HOOK_ENV).every((name) => data.includes(name));
 }
 
 /** Find a command: a path as it is, a name on PATH */
@@ -134,6 +237,9 @@ export class Toolchains {
   private fetch: FetchFn;
   private releases: Promise<ToolchainRelease[]> | null = null;
   private installs = new Map<string, Promise<void>>();
+  /** moonup installs run one at a time: they share MOONUP_HOME and MOON_HOME */
+  private installQueue: Promise<unknown> = Promise.resolve();
+  private hookChecks = new Map<string, Promise<boolean>>();
 
   constructor(options: ToolchainsOptions) {
     this.options = options;
@@ -148,9 +254,14 @@ export class Toolchains {
     return this.options.moonup;
   }
 
-  /** MOON_HOME of builds with moonup toolchains */
+  /** MOON_HOME of `moonup install` (runs get their own) */
   get moonHome(): string {
     return join(this.options.workDir, "moon-home");
+  }
+
+  /** HOME of installs and tools */
+  private get home(): string {
+    return join(this.options.workDir, "home");
   }
 
   /** MOONUP_HOME of builds */
@@ -205,6 +316,50 @@ export class Toolchains {
       throw new Error(`No toolchain was released before ${createdAt}`);
     }
     return version;
+  }
+
+  /**
+   * Select, check and install the toolchain for a version published at
+   * `createdAt`. Throws ToolchainRefused for a toolchain that cannot turn
+   * off pre-build and postadd hooks.
+   */
+  async prepare(createdAt: string | undefined): Promise<string> {
+    const version = await this.resolve(createdAt);
+    const date = await this.releaseDate(version);
+    if (date && Date.parse(date) < Date.parse(MIN_TOOLCHAIN_DATE)) {
+      throw new ToolchainRefused(
+        `Toolchain ${version} was released on ${date.slice(0, 10)}, before ${MIN_TOOLCHAIN_DATE.slice(0, 10)}: it cannot turn off pre-build and postadd hooks (MOON_IGNORE_PREBUILD), so the proxy does not run it`,
+      );
+    }
+    await this.ensure(version);
+    const moon = this.moonBinary(version);
+    if (!existsSync(moon)) throw new ToolchainRefused(`Toolchain ${version} has no ${moon}`);
+    let check = this.hookChecks.get(moon);
+    if (!check) {
+      check = binaryKnowsHookEnv(moon);
+      this.hookChecks.set(moon, check);
+    }
+    if (!(await check)) {
+      throw new ToolchainRefused(
+        `${moon} (toolchain ${version}) does not read MOON_IGNORE_PREBUILD and MOON_IGNORE_POSTADD, so it cannot turn off pre-build and postadd hooks; the proxy does not run it`,
+      );
+    }
+    return version;
+  }
+
+  /** The release time of a toolchain, when known */
+  private async releaseDate(version: string): Promise<string | null> {
+    if (version === "current") return null;
+    if (this.options.setting === "auto") {
+      const release = (await this.listReleases()).find((r) => r.version === version);
+      if (release) return release.date;
+    }
+    return dateFromVersion(version);
+  }
+
+  /** The moon binary of a toolchain */
+  private moonBinary(version: string): string {
+    return join(this.binDir(version), process.platform === "win32" ? "moon.exe" : "moon");
   }
 
   /** The dated toolchain list, cached for a day; a stale copy is used when a fetch fails */
@@ -271,15 +426,22 @@ export class Toolchains {
     return response.json();
   }
 
-  /** Install a toolchain with moonup when it is not installed. Concurrent calls share one install. */
+  /**
+   * Install a toolchain with moonup when it is not installed. Concurrent
+   * calls share one install, and installs run one at a time. moonup
+   * downloads from its own server, never from the proxy, so an install
+   * cannot wait for a fallback.
+   */
   ensure(version: string): Promise<void> {
     if (version === "current" || !this.usesMoonup) return Promise.resolve();
-    if (existsSync(join(this.moonupHome, "toolchains", version))) return Promise.resolve();
-    let install = this.installs.get(version);
-    if (!install) {
-      install = this.install(version).finally(() => this.installs.delete(version));
-      this.installs.set(version, install);
-    }
+    const running = this.installs.get(version);
+    if (running) return running;
+    if (existsSync(this.moonBinary(version))) return Promise.resolve();
+    const install = this.installQueue
+      .then(() => (existsSync(this.moonBinary(version)) ? undefined : this.install(version)))
+      .finally(() => this.installs.delete(version));
+    this.installQueue = install.catch(() => undefined);
+    this.installs.set(version, install);
     return install;
   }
 
@@ -287,7 +449,14 @@ export class Toolchains {
     const moonup = findCommand(this.options.moonup);
     if (!moonup) throw new Error(`moonup is not found at '${this.options.moonup}'`);
     logger.info(`Installing toolchain ${version} with moonup`);
-    const result = await this.spawn([moonup, "install", version], this.options.workDir, {});
+    await mkdir(this.moonHome, { recursive: true });
+    const env = childEnvironment({
+      path: process.env.PATH ?? "",
+      home: this.home,
+      MOON_HOME: this.moonHome,
+      MOONUP_HOME: this.moonupHome,
+    });
+    const result = await this.spawn([moonup, "install", version], this.options.workDir, env);
     if (result.exitCode !== 0) {
       throw new Error(
         `moonup install ${version} failed: ${lastLines(result.stderr || result.stdout)}`,
@@ -313,22 +482,29 @@ export class Toolchains {
    * MOONCAKES_REGISTRY and by a `config.json` in the `registry` form, which
    * old and new moon both read. (Some old moon versions still download
    * dependency zips from download.mooncakes.io.)
+   *
+   * `home` is the MOON_HOME (and HOME) of this run: a directory of the
+   * caller that no other run uses at the same time.
    */
   async run(
     version: string,
     args: string[],
     cwd: string,
-    options: { registry?: string | null } = {},
+    options: { home: string; registry?: string | null },
   ): Promise<RunResult> {
-    const home = version === "current" ? await this.currentMoonHome() : this.moonHome;
+    const home = options.home;
     await mkdir(home, { recursive: true });
+    if (version === "current") await this.linkCurrentToolchain(home);
     await writeRegistryConfig(home, options.registry ?? null);
     const bin = this.binDir(version);
-    const env: Record<string, string> = {
+    const vars: { path: string; home: string } & Record<string, string> = {
+      path: [bin, join(bin, "internal"), process.env.PATH ?? ""].join(delimiter),
+      home,
       MOON_HOME: home,
-      PATH: [bin, join(bin, "internal"), process.env.PATH ?? ""].join(delimiter),
+      MOONUP_HOME: this.moonupHome,
     };
-    if (options.registry) env.MOONCAKES_REGISTRY = options.registry;
+    if (options.registry) vars.MOONCAKES_REGISTRY = options.registry;
+    const env = childEnvironment(vars);
 
     if (version === "current") {
       return this.spawn([this.userMoon, ...args], cwd, env);
@@ -347,17 +523,15 @@ export class Toolchains {
   ): Promise<RunResult | null> {
     const path = join(this.binDir(version), process.platform === "win32" ? `${tool}.exe` : tool);
     if (!existsSync(path)) return null;
-    return this.spawn([path, ...args], cwd, {});
+    const env = childEnvironment({ path: process.env.PATH ?? "", home: this.home });
+    return this.spawn([path, ...args], cwd, env);
   }
 
   /**
-   * A MOON_HOME with the binaries and core library of the user's MOON_HOME,
-   * but its own registry cache and config.json, so builds use the
-   * registry that the caller sets.
+   * Link the binaries and core library of the user's MOON_HOME into a run
+   * MOON_HOME, which has its own registry cache and config.json.
    */
-  private async currentMoonHome(): Promise<string> {
-    const home = join(this.options.workDir, "moon-home-current");
-    await mkdir(home, { recursive: true });
+  private async linkCurrentToolchain(home: string): Promise<void> {
     for (const name of ["bin", "lib", "include"]) {
       const link = join(home, name);
       const target = join(this.userMoonHome, name);
@@ -365,24 +539,15 @@ export class Toolchains {
         await symlink(target, link, process.platform === "win32" ? "junction" : "dir");
       }
     }
-    return home;
   }
 
+  /** Run a command with exactly `env` (see childEnvironment) */
   private async spawn(cmd: string[], cwd: string, env: Record<string, string>): Promise<RunResult> {
-    await mkdir(this.moonHome, { recursive: true });
     await mkdir(this.moonupHome, { recursive: true });
-    const childEnv: Record<string, string | undefined> = {
-      ...process.env,
-      MOON_HOME: this.moonHome,
-      MOONUP_HOME: this.moonupHome,
-      ...env,
-    };
-    // The toolchain comes from the command, not from the caller's environment
-    childEnv.MOONUP_TOOLCHAIN_SPEC = undefined;
-    childEnv.MOON_CORE_OVERRIDE = undefined;
+    await mkdir(env.HOME, { recursive: true });
     const proc = Bun.spawn(cmd, {
       cwd,
-      env: childEnv,
+      env,
       stdout: "pipe",
       stderr: "pipe",
       timeout: RUN_TIMEOUT_MS,

@@ -384,7 +384,8 @@ moonup = "moonup"      # path of moonup (https://github.com/chawyehsu/moonup)
   entries in the order of the published zip, from the manifest line of the version. It serves
   the rebuild **only when its SHA-256 is the checksum in the index**, that is, when it is
   byte-identical to the published zip. Otherwise it sends `502` and logs the entries that are
-  different. Without a manifest line, it does not rebuild.
+  different. Without a manifest line, it does not rebuild. Before moon runs, each file of the
+  manifest must be in the tag with the same SHA-256; if not, moon does not run.
 - **Local wasm build.** When upstream has no prebuilt wasm or cannot be reached, the proxy
   builds the executable package from its zip (from the cache, from upstream, or from a GitHub
   rebuild, always checked against the index) with `moon build --target wasm --release`, and
@@ -401,6 +402,12 @@ moonup = "moonup"      # path of moonup (https://github.com/chawyehsu/moonup)
   `~/.moon` does not change. `toolchain` can also be a fixed version or `nightly-YYYY-MM-DD`.
   With `toolchain = "current"`, the proxy uses the moon of your `MOON_HOME` and does not need
   moonup. When moonup is missing, the proxy logs one error and the fallbacks stay off.
+- **Package hooks and secrets.** Builds run with `MOON_IGNORE_PREBUILD=1` and
+  `MOON_IGNORE_POSTADD=1`, so moon does not run the `pre-build` or `postadd` commands of the
+  code it builds. A package that needs its pre-build output can fail to build. The proxy does
+  not run toolchains released before 2025-05-29, which do not know these variables, so
+  versions that need such a toolchain cannot be rebuilt. Child processes get an environment
+  from an allowlist: `GITHUB_TOKEN` and other secrets of the proxy are not passed.
 - **Dependencies of a build** come through the proxy. Some old toolchains (for example
   `0.10.0`) download dependency zips from download.mooncakes.io directly, so a build with them
   needs that host.

@@ -58,6 +58,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `manifest_url`: base URL of manifest files, for an index without `manifests/`.
   - With a fallback on, file requests have no idle timeout, because a build can take longer
     than the 10 second default of the server.
+  - Builds do not run package hooks: each moon command gets `MOON_IGNORE_PREBUILD=1` and
+    `MOON_IGNORE_POSTADD=1`, and the proxy logs the hooks that it finds. Toolchains released
+    before 2025-05-29 (and moon binaries that do not know these variables) are refused, so old
+    versions that need them cannot be rebuilt.
+  - Child processes get an environment from an allowlist (no `GITHUB_TOKEN` or other secrets
+    of the proxy), with their own `HOME` and a new `MOON_HOME` for each command.
+  - Before `moon package` runs on a GitHub tag, each file of the manifest must be in the tag
+    with the same SHA-256.
+  - Builds that ask the proxy for a dependency that needs a GitHub rebuild do not deadlock:
+    zip rebuilds do not wait in a queue (one rebuild per version at a time), at most two wasm
+    builds run at the same time, and only moonup installs run one at a time.
 
 ### Fixed
 

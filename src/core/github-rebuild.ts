@@ -6,13 +6,19 @@
  * manifest of the published zip gives the order, so the rebuild is put in
  * that order and must then be byte-identical: its SHA-256 must be the
  * checksum in the index. Anything else is refused.
+ *
+ * moon runs on the tag before the result is checked, so the tag is checked
+ * first: each manifest entry must be in the tag tree with the same content,
+ * or moon does not run. Other files in the tag are allowed, because the zip
+ * that moon writes is checked against the checksum.
  */
 
 import { createHash } from "node:crypto";
-import { readFile, readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { lstat, readFile, readdir, realpath } from "node:fs/promises";
+import { join, sep } from "node:path";
 import fs from "../utils/fs.ts";
 import { reorderZip, zipEntryDigests } from "../utils/zip.ts";
+import { findBuildHooks } from "./build-hooks.ts";
 import { type ArchiveManifest, compareWithManifest } from "./manifest.ts";
 import type { FetchFn } from "./toolchain.ts";
 
@@ -55,6 +61,7 @@ export interface RebuildContext {
   /** Run `moon package` in a module directory and return the zip it wrote */
   packageModule(moduleDir: string, createdAt: string | undefined): Promise<Uint8Array>;
   log?(message: string): void;
+  warn?(message: string): void;
 }
 
 export interface RebuildResult {
@@ -128,6 +135,57 @@ export async function findModuleRoot(dir: string, moduleName: string): Promise<s
 
 function sha256Hex(data: Uint8Array): string {
   return createHash("sha256").update(data).digest("hex");
+}
+
+/**
+ * Compare a module directory with a manifest before anything runs on it.
+ * Each manifest entry must be a regular file inside the directory, with the
+ * same size and SHA-256. Returns one line per problem; other files in the
+ * directory are not problems.
+ */
+export async function compareTreeWithManifest(
+  moduleDir: string,
+  manifest: ArchiveManifest,
+): Promise<string[]> {
+  const root = await realpath(moduleDir);
+  const problems: string[] = [];
+  for (const entry of manifest.entries) {
+    if (entry.path.endsWith("/")) continue;
+    const parts = entry.path.split("/");
+    if (
+      entry.path.includes("\\") ||
+      parts.some((part) => part === "" || part === "." || part === "..")
+    ) {
+      problems.push(`unsafe path: ${entry.path}`);
+      continue;
+    }
+    const path = join(root, ...parts);
+    let data: Uint8Array;
+    try {
+      const info = await lstat(path);
+      if (!info.isFile()) {
+        problems.push(`not a regular file in the tag: ${entry.path}`);
+        continue;
+      }
+      // A parent directory can be a link out of the tree
+      if (!(await realpath(path)).startsWith(root + sep)) {
+        problems.push(`outside the module in the tag: ${entry.path}`);
+        continue;
+      }
+      data = new Uint8Array(await readFile(path));
+    } catch {
+      problems.push(`missing in the tag: ${entry.path}`);
+      continue;
+    }
+    const digest = sha256Hex(data);
+    if (digest !== entry.sha256 || data.length !== entry.size) {
+      problems.push(
+        `content differs: ${entry.path} (published ${entry.sha256.slice(0, 12)}, ${entry.size} bytes; ` +
+          `tag ${digest.slice(0, 12)}, ${data.length} bytes)`,
+      );
+    }
+  }
+  return problems;
 }
 
 /** Download the tarball of the first tag that exists; null when none does */
@@ -216,6 +274,20 @@ export async function rebuildFromGitHub(
       );
     }
     const relative = root.slice(sourceDir.length).split(/[\\/]/).filter(Boolean).slice(1).join("/");
+
+    const treeProblems = await compareTreeWithManifest(root, request.manifest);
+    if (treeProblems.length > 0) {
+      throw new RebuildError(
+        `Tag ${tarball.tag} does not have the files of the published ${id}, so moon was not run`,
+        treeProblems,
+      );
+    }
+    const hooks = await findBuildHooks(root);
+    if (hooks.length > 0) {
+      (ctx.warn ?? ctx.log)?.(
+        `${id} declares hooks that moon package ignores (MOON_IGNORE_PREBUILD, MOON_IGNORE_POSTADD): ${hooks.join(", ")}`,
+      );
+    }
 
     const local = await ctx.packageModule(root, request.createdAt);
     const problems = compareWithManifest(request.manifest, zipEntryDigests(local));

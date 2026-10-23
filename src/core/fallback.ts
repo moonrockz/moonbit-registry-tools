@@ -9,6 +9,12 @@
  *   prebuild; it is trusted because the proxy built it from checked sources.
  *
  * All fallbacks are off by default ([proxy.fallback]).
+ *
+ * Builds get their dependencies from this proxy, so a build can wait for
+ * another fallback (a dependency zip that needs a GitHub rebuild). No lock is
+ * held while a child runs that can call back into the proxy: each version is
+ * rebuilt once (single flight in the proxy), zip rebuilds do not queue, and
+ * wasm builds have slots of their own, which only wasm builds take.
  */
 
 import { existsSync } from "node:fs";
@@ -17,6 +23,7 @@ import { dirname, join, normalize, sep } from "node:path";
 import { resolveFallbackConfig } from "../config/schema.ts";
 import logger from "../utils/logger.ts";
 import { listZipEntries, readZipEntry } from "../utils/zip.ts";
+import { findBuildHooks } from "./build-hooks.ts";
 import { RebuildError, type RebuildResult, rebuildFromGitHub } from "./github-rebuild.ts";
 import { type ArchiveManifest, parseManifestFile, readManifest } from "./manifest.ts";
 import type { PrebuildAsset } from "./prebuild.ts";
@@ -41,11 +48,38 @@ export interface LocalWasm {
 /** Directory of fallback work files below `data_dir` */
 const FALLBACK_DIR = "fallback";
 
+/** Local wasm builds at the same time; each one can use all cores */
+const WASM_BUILD_SLOTS = 2;
+
+/** At most `size` tasks run at a time; the others wait in order */
+class Semaphore {
+  private active = 0;
+  private waiting: (() => void)[] = [];
+
+  constructor(private size: number) {}
+
+  async run<T>(task: () => Promise<T>): Promise<T> {
+    if (this.active < this.size) {
+      this.active++;
+    } else {
+      // A finished task gives its slot to the first waiting task
+      await new Promise<void>((resolve) => this.waiting.push(resolve));
+    }
+    try {
+      return await task();
+    } finally {
+      const next = this.waiting.shift();
+      if (next) next();
+      else this.active--;
+    }
+  }
+}
+
 export class ProxyFallbacks {
   private registry: Registry;
   private toolchainsInstance: Toolchains | null = null;
   private readiness: Promise<boolean> | null = null;
-  private buildQueue: Promise<unknown> = Promise.resolve();
+  private wasmSlots = new Semaphore(WASM_BUILD_SLOTS);
 
   /** URL of this server, so that builds get their dependencies through the proxy */
   selfUrl: string | null = null;
@@ -112,25 +146,40 @@ export class ProxyFallbacks {
     return this.readiness;
   }
 
-  /** Builds get their index and dependencies through this proxy, when it serves */
-  private get buildOptions(): { registry: string | null } {
-    return { registry: this.selfUrl };
+  /**
+   * Options of a run: its own MOON_HOME, and the index and dependencies
+   * through this proxy, when it serves
+   */
+  private runOptions(home: string): { home: string; registry: string | null } {
+    return { home, registry: this.selfUrl };
   }
 
-  /** Run builds one at a time: each one can use all cores */
-  private serialize<T>(run: () => Promise<T>): Promise<T> {
-    const next = this.buildQueue.then(run, run);
-    this.buildQueue = next.catch(() => undefined);
-    return next;
+  /** A new directory below the fallback work directory */
+  private tempPath(prefix: string): string {
+    return join(
+      this.workDir,
+      "tmp",
+      `${prefix}-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    );
+  }
+
+  /** Log the pre-build and postadd hooks of a module, which the build ignores */
+  private async logHooks(id: string, moduleDir: string): Promise<void> {
+    const hooks = await findBuildHooks(moduleDir);
+    if (hooks.length === 0) return;
+    logger.warn(
+      `${id} declares hooks that the build ignores (MOON_IGNORE_PREBUILD, MOON_IGNORE_POSTADD): ` +
+        `${hooks.join(", ")}. A package that needs its pre-build output can fail to build.`,
+    );
   }
 
   /**
-   * Fetch the registry index into the build MOON_HOME: moon resolves
+   * Fetch the registry index into the run MOON_HOME: moon resolves
    * dependencies only from a local index and does not fetch one by itself.
    * A failure is logged; the build then fails if it needs a dependency.
    */
-  private async updateRegistry(toolchain: string, cwd: string): Promise<void> {
-    const result = await this.toolchains.run(toolchain, ["update"], cwd, this.buildOptions);
+  private async updateRegistry(toolchain: string, cwd: string, home: string): Promise<void> {
+    const result = await this.toolchains.run(toolchain, ["update"], cwd, this.runOptions(home));
     if (result.exitCode !== 0) {
       logger.warn(
         `moon update with toolchain ${toolchain} failed: ${lastLines(`${result.stdout}\n${result.stderr}`, 3)}`,
@@ -203,50 +252,53 @@ export class ProxyFallbacks {
       );
     }
 
-    return this.serialize(() =>
-      rebuildFromGitHub(
-        {
-          owner,
-          name,
-          version,
-          checksum,
-          repository: line.repository,
-          createdAt: typeof line.created_at === "string" ? line.created_at : undefined,
-          manifest,
-        },
-        {
-          fetch: (input, init) => this.fetch(input, init),
-          githubApi: this.config.github_api,
-          token: process.env.GITHUB_TOKEN,
-          tempRoot: join(this.workDir, "tmp"),
-          packageModule: (dir, createdAt) => this.packageModule(dir, createdAt),
-          log: (message) => logger.info(message),
-        },
-      ),
+    return rebuildFromGitHub(
+      {
+        owner,
+        name,
+        version,
+        checksum,
+        repository: line.repository,
+        createdAt: typeof line.created_at === "string" ? line.created_at : undefined,
+        manifest,
+      },
+      {
+        fetch: (input, init) => this.fetch(input, init),
+        githubApi: this.config.github_api,
+        token: process.env.GITHUB_TOKEN,
+        tempRoot: join(this.workDir, "tmp"),
+        packageModule: (dir, createdAt) => this.packageModule(dir, createdAt),
+        log: (message) => logger.info(message),
+        warn: (message) => logger.warn(message),
+      },
     );
   }
 
   /** Run `moon package` with the toolchain of the publish time; returns the zip */
   async packageModule(moduleDir: string, createdAt: string | undefined): Promise<Uint8Array> {
     const toolchains = this.toolchains;
-    const toolchain = await toolchains.resolve(createdAt);
-    await toolchains.ensure(toolchain);
+    const toolchain = await toolchains.prepare(createdAt);
     logger.info(`Running moon package with toolchain ${toolchain}`);
-    await this.updateRegistry(toolchain, moduleDir);
-    const result = await toolchains.run(toolchain, ["package"], moduleDir, this.buildOptions);
-    if (result.exitCode !== 0) {
-      throw new RebuildError(
-        `moon package with toolchain ${toolchain} failed: ${lastLines(`${result.stdout}\n${result.stderr}`)}`,
-      );
+    const home = this.tempPath("home");
+    try {
+      await this.updateRegistry(toolchain, moduleDir, home);
+      const result = await toolchains.run(toolchain, ["package"], moduleDir, this.runOptions(home));
+      if (result.exitCode !== 0) {
+        throw new RebuildError(
+          `moon package with toolchain ${toolchain} failed: ${lastLines(`${result.stdout}\n${result.stderr}`)}`,
+        );
+      }
+      // moon writes _build/publish; older moon wrote target/publish
+      for (const dir of ["_build", "target"]) {
+        const publish = join(moduleDir, dir, "publish");
+        if (!existsSync(publish)) continue;
+        const zip = (await readdir(publish)).find((file) => file.endsWith(".zip"));
+        if (zip) return new Uint8Array(await readFile(join(publish, zip)));
+      }
+      throw new RebuildError(`moon package with toolchain ${toolchain} wrote no zip`);
+    } finally {
+      await rm(home, { recursive: true, force: true });
     }
-    // moon writes _build/publish; older moon wrote target/publish
-    for (const dir of ["_build", "target"]) {
-      const publish = join(moduleDir, dir, "publish");
-      if (!existsSync(publish)) continue;
-      const zip = (await readdir(publish)).find((file) => file.endsWith(".zip"));
-      if (zip) return new Uint8Array(await readFile(join(publish, zip)));
-    }
-    throw new RebuildError(`moon package with toolchain ${toolchain} wrote no zip`);
   }
 
   // ---------------------------------------------------------------------------
@@ -254,33 +306,34 @@ export class ProxyFallbacks {
 
   /**
    * Build the wasm of an executable package from a source zip, with the
-   * toolchain of the publish time. Builds run one at a time.
+   * toolchain of the publish time. At most WASM_BUILD_SLOTS builds run at a
+   * time. A build waits only for zips (never for another wasm build), and zip
+   * fallbacks take no slot, so a build that needs a rebuilt dependency
+   * cannot deadlock.
    */
   buildWasm(
     asset: PrebuildAsset,
     zip: Uint8Array,
     createdAt: string | undefined,
   ): Promise<LocalWasm> {
-    return this.serialize(() => this.doBuildWasm(asset, zip, createdAt));
+    return this.wasmSlots.run(() => this.runWasmBuild(asset, zip, createdAt));
   }
 
-  private async doBuildWasm(
+  /** Run one wasm build (buildWasm limits how many run) */
+  async runWasmBuild(
     asset: PrebuildAsset,
     zip: Uint8Array,
     createdAt: string | undefined,
   ): Promise<LocalWasm> {
     const toolchains = this.toolchains;
-    const toolchain = await toolchains.resolve(createdAt);
-    await toolchains.ensure(toolchain);
+    const toolchain = await toolchains.prepare(createdAt);
 
-    const work = join(
-      this.workDir,
-      "tmp",
-      `wasm-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    );
+    const work = this.tempPath("wasm");
+    const home = join(work, "moon-home");
     try {
       const moduleDir = join(work, "module");
       await unpackZip(zip, moduleDir);
+      await this.logHooks(`${asset.owner}/${asset.name}@${asset.version}`, moduleDir);
       const sourceDir = await readSourceDir(moduleDir);
       const packageDir = [sourceDir, ...asset.packagePath].filter((s) => s !== "").join("/");
       const args = [
@@ -294,8 +347,8 @@ export class ProxyFallbacks {
         `Building ${asset.owner}/${asset.name}@${asset.version}/${asset.packagePath.join("/")} ` +
           `with toolchain ${toolchain}: moon ${args.join(" ")}`,
       );
-      await this.updateRegistry(toolchain, moduleDir);
-      const result = await toolchains.run(toolchain, args, moduleDir, this.buildOptions);
+      await this.updateRegistry(toolchain, moduleDir, home);
+      const result = await toolchains.run(toolchain, args, moduleDir, this.runOptions(home));
       if (result.exitCode !== 0) {
         throw new Error(
           `moon ${args.join(" ")} with toolchain ${toolchain} failed: ${lastLines(`${result.stdout}\n${result.stderr}`)}`,

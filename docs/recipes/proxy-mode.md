@@ -137,9 +137,12 @@ When the download of a zip fails (no network, `5xx` or `404`), the proxy:
    exist. Set `GITHUB_TOKEN` for a higher GitHub rate limit.
 4. Finds the directory whose `moon.mod` or `moon.mod.json` has the name of the module. This
    can be a subdirectory of the repository.
-5. Runs `moon package` with the toolchain of the publish date.
-6. Compares each file with the manifest, puts the entries in the published order, and
-   computes the SHA-256 of the result.
+5. Compares the files of the tag with the manifest. Each file of the published zip must be in
+   the tag, as a regular file, with the same SHA-256. When one is missing or different, the
+   proxy stops here and does not run moon. Other files in the tag are allowed.
+6. Runs `moon package` with the toolchain of the publish date.
+7. Compares each file of the result with the manifest, puts the entries in the published
+   order, and computes the SHA-256 of the result.
 
 ### Build a Prebuilt Wasm Locally
 
@@ -172,6 +175,18 @@ gives the upstream `moonfmt.wasm` of `moonbitlang/parser@0.3.4`.
   because it built it from a zip that matches the index checksum, with a known toolchain. A
   client sees that the file is local from the `X-Registry-Built-Locally` header and from the
   proxy log.
+- **Builds do not run commands from packages.** moon runs the `pre-build` commands of a
+  package and the `scripts.postadd` command of a module, unless `MOON_IGNORE_PREBUILD` and
+  `MOON_IGNORE_POSTADD` are set. The proxy sets both for each moon command (`update`,
+  `package`, `build`). The proxy logs the hooks that it finds in a module. A package that needs
+  the output of its pre-build can then fail to build; that fallback then sends `502`.
+- **Builds do not get the secrets of the proxy.** A child process (moon, moonup,
+  `moon-wasm-opt`) gets only `PATH`, its own `HOME`, `MOON_HOME` and `MOONUP_HOME`,
+  `MOONCAKES_REGISTRY`, the locale and temporary directory variables, the network proxy
+  variables (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, `SSL_CERT_FILE`, ...),
+  `MOONUP_DIST_SERVER`, and on Windows the system variables that programs need to start.
+  `GITHUB_TOKEN` and all other variables stay in the proxy. The proxy itself uses
+  `GITHUB_TOKEN` to download tag tarballs.
 
 ### Toolchains
 
@@ -190,8 +205,25 @@ toolchain takes about 150 MB.
 
 When moonup is not found, the proxy logs one error and the fallbacks stay off.
 
+The proxy does not run a toolchain that cannot turn off package hooks. moon reads
+`MOON_IGNORE_PREBUILD` since 2025-05-29 (`0.1.20250529+8a98c8e02` is the first toolchain with
+it). So:
+
+- A toolchain released before 2025-05-29 is refused before moonup installs it. With
+  `toolchain = "auto"`, this means that a version published before that date (or soon after
+  it) cannot be rebuilt or built: the fallback sends `502` and the log gives the reason. Set a
+  newer fixed `toolchain` when a newer toolchain can build these versions.
+- After the install, the proxy also checks that the `moon` binary of the toolchain knows both
+  variables. With `toolchain = "current"`, it checks the moon of your `MOON_HOME`.
+
+Each moon command runs with a new, empty `MOON_HOME` (moon finds its core library next to its
+binary), so builds that run at the same time do not share a registry index or cache. moonup
+installs run one at a time. At most two local wasm builds run at the same time. Zip rebuilds
+are not limited: a build can ask the proxy for a dependency that needs a rebuild, and a limit
+there could make the two wait for each other. Each version is rebuilt only once at a time.
+
 Builds get their dependencies through the proxy (with `MOONCAKES_REGISTRY` and a `config.json`
-in the build `MOON_HOME`). Some old toolchains, for example `0.10.0`, download dependency zips
+in the `MOON_HOME` of the command). Some old toolchains, for example `0.10.0`, download dependency zips
 from download.mooncakes.io directly, so builds with them need that host.
 
 ### Manifests
