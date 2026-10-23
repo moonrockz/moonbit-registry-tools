@@ -365,6 +365,72 @@ When upstream is not available, the proxy serves the last index and all files in
 A request for a file that is not in the cache gets `502` (or `404`). An old `symbols.zip`
 is served when the proxy cannot get a new one.
 
+### Fallbacks (opt-in)
+
+When upstream cannot send a file, the proxy can make it. Both fallbacks are off by default.
+
+```toml
+[proxy.fallback]
+github = true          # rebuild a zip from the GitHub tag of its repository
+build_wasm = true      # build a missing prebuilt wasm from the package source
+toolchain = "auto"     # "auto", "current" or a version such as "0.6.34+e16ca94e6"
+moonup = "moonup"      # path of moonup (https://github.com/chawyehsu/moonup)
+# manifest_url = "https://example.com/manifests"   # when the index has no manifests/
+```
+
+- **GitHub rebuild.** When the download of a zip fails (network error, `5xx` or `404`) and
+  the index line has a GitHub `repository`, the proxy downloads the tarball of tag
+  `v<version>` (or `<version>`), finds the module, and runs `moon package`. It puts the
+  entries in the order of the published zip, from the manifest line of the version. It serves
+  the rebuild **only when its SHA-256 is the checksum in the index**, that is, when it is
+  byte-identical to the published zip. Otherwise it sends `502` and logs the entries that are
+  different. Without a manifest line, it does not rebuild. Before moon runs, each file of the
+  manifest must be in the tag with the same SHA-256; if not, moon does not run.
+- **Local wasm build.** When upstream has no prebuilt wasm or cannot be reached, the proxy
+  builds the executable package from its zip (from the cache, from upstream, or from a GitHub
+  rebuild, always checked against the index) with `moon build --target wasm --release`, and
+  then `moon-wasm-opt -O --all-features` when the toolchain has it. It writes the `.sha256`
+  itself and sends `X-Registry-Built-Locally: true` with both files. In general this wasm is
+  not byte-identical to an upstream prebuild. It is trusted because the proxy built it from
+  checked sources. moonx waits about 30 seconds for a file: when a first build takes longer
+  (for example while moonup installs a toolchain), run moonx again, or fill the cache first
+  with `mirror --proxy --prebuild`.
+- **Toolchain.** Old packages often build only with the toolchain of their publish date.
+  With `toolchain = "auto"`, the proxy uses the newest toolchain released before the
+  `created_at` of the version, and installs it with moonup when it is missing. moonup and its
+  toolchains use their own `MOON_HOME` and `MOONUP_HOME` below `data_dir/fallback/`, so your
+  `~/.moon` does not change. `toolchain` can also be a fixed version or `nightly-YYYY-MM-DD`.
+  With `toolchain = "current"`, the proxy uses the moon of your `MOON_HOME` and does not need
+  moonup. When moonup is missing, the proxy logs one error and the fallbacks stay off.
+- **Package hooks and secrets.** Builds run with `MOON_IGNORE_PREBUILD=1` and
+  `MOON_IGNORE_POSTADD=1`, so moon does not run the `pre-build` or `postadd` commands of the
+  code it builds. A package that needs its pre-build output can fail to build (or, for a
+  GitHub rebuild, fail `moon package`, which checks the tests too). The proxy does
+  not run toolchains released before 2025-05-29, which do not know these variables, so
+  versions that need such a toolchain cannot be rebuilt. Child processes get an environment
+  from an allowlist: `GITHUB_TOKEN` and other secrets of the proxy are not passed.
+- **Dependencies of a build** come through the proxy. Some old toolchains (for example
+  `0.10.0`) download dependency zips from download.mooncakes.io directly, so a build with them
+  needs that host.
+
+#### Manifests
+
+A manifest line records the entries of a published zip in archive order, with the SHA-256
+and size of each file. The files are next to the index, at
+`manifests/user/<owner>/<pkg>.manifest`; moon does not read them. An index mirror such as
+`moonrockz/mooncakes-index` can carry them; the proxy copies them with the index.
+
+```bash
+# Print the manifest line of one zip
+moonbit-registry manifest moonbitlang-x-0.5.6.zip
+
+# Add the missing lines for the versions of an index (it downloads each zip and checks it)
+moonbit-registry manifest build --index ./mooncakes-index --packages 'moonbitlang/*' --limit 500
+```
+
+`manifest build` can run again at any time. It adds only the lines that are missing and
+keeps the order of the index.
+
 ### Disk use
 
 All data is below `data_dir`:
@@ -374,6 +440,8 @@ All data is below `data_dir`:
 | `index/` | Served index (git), with the upstream clone in `index/sources/<source>/` |
 | `packages/<owner>/<name>/<version>.zip` | Cached zips |
 | `prebuild/<owner>/<name>@<version>/...` | Cached prebuilt wasm and `.sha256` files |
+| `prebuild-local/<owner>/<name>@<version>/...` | Prebuilt wasm that the proxy built (fallback) |
+| `fallback/` | Toolchains and temporary files of the fallbacks |
 | `symbols/symbols.zip` | Cached symbol database |
 
 The index takes some tens of MB. The cache grows only with the files that clients ask for.

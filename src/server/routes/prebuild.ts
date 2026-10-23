@@ -6,7 +6,6 @@
  * the default source; mirror mode serves only assets that are cached.
  */
 
-import { existsSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { parseAssetPath } from "../../core/prebuild.ts";
 import { ProxyError } from "../../core/proxy.ts";
@@ -16,15 +15,20 @@ import logger from "../../utils/logger.ts";
 export const PREBUILD_PREFIXES = ["/prebuild/", "/assets/"] as const;
 
 export function createPrebuildRoutes(registry: Registry) {
-  async function serve(path: string, contentType: string): Promise<Response> {
+  async function serve(
+    path: string,
+    contentType: string,
+    builtLocally: boolean,
+  ): Promise<Response> {
     const stats = await stat(path);
-    return new Response(Bun.file(path), {
-      headers: {
-        "Content-Type": contentType,
-        "Content-Length": stats.size.toString(),
-        "Cache-Control": "public, max-age=31536000, immutable",
-      },
-    });
+    const headers: Record<string, string> = {
+      "Content-Type": contentType,
+      "Content-Length": stats.size.toString(),
+      "Cache-Control": "public, max-age=31536000, immutable",
+    };
+    // A wasm that this proxy built is not the upstream file; say so
+    if (builtLocally) headers["X-Registry-Built-Locally"] = "true";
+    return new Response(Bun.file(path), { headers });
   }
 
   return async function handlePrebuildRequest(
@@ -43,10 +47,9 @@ export function createPrebuildRoutes(registry: Registry) {
     }
 
     const { asset, checksum } = parsed;
-    let paths = registry.proxy.prebuildPaths(asset);
-    const cached = existsSync(paths.wasm) && existsSync(paths.checksum);
+    let paths = registry.proxy.findCachedPrebuild(asset);
 
-    if (!cached) {
+    if (!paths) {
       if (!registry.proxy.enabled) {
         return new Response("Not found", { status: 404 });
       }
@@ -68,9 +71,10 @@ export function createPrebuildRoutes(registry: Registry) {
       }
     }
 
+    const builtLocally = paths.builtLocally === true;
     return checksum
-      ? serve(paths.checksum, "text/plain; charset=utf-8")
-      : serve(paths.wasm, "application/wasm");
+      ? serve(paths.checksum, "text/plain; charset=utf-8", builtLocally)
+      : serve(paths.wasm, "application/wasm", builtLocally);
   };
 }
 

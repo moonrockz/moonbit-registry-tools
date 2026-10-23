@@ -453,6 +453,40 @@ export class IndexManager {
     }
   }
 
+  /**
+   * The full index line of a version, with every upstream field (for example
+   * `created_at` and `repository`). Looks in the served index, then in the
+   * index of the source when one is named.
+   */
+  async getIndexLine(
+    username: string,
+    packageName: string,
+    version: string,
+    sourceName?: string,
+  ): Promise<Record<string, unknown> | null> {
+    const paths = [
+      this.getPackageIndexPath(username, packageName),
+      join(this.indexDir, username, packageName),
+    ];
+    const sourcePath = sourceName
+      ? this.findSourcePackageIndex(username, packageName, sourceName)
+      : null;
+    if (sourcePath) paths.push(sourcePath);
+    for (const path of paths) {
+      if (!existsSync(path)) continue;
+      for (const line of (await fs.readText(path)).split("\n")) {
+        if (line.trim() === "") continue;
+        try {
+          const entry = JSON.parse(line) as Record<string, unknown>;
+          if (entry.version === version) return entry;
+        } catch {
+          // Not a version line
+        }
+      }
+    }
+    return null;
+  }
+
   /** Write a package entry to the index */
   async writePackageEntry(entry: PackageEntry): Promise<void> {
     const pkgId = parsePackageId(entry.name);

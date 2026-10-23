@@ -8,7 +8,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PREDEFINED_SOURCES } from "../../src/config/defaults.ts";
 import { loadConfig, saveConfig } from "../../src/config/loader.ts";
-import { ConfigValidationError, validateConfig } from "../../src/config/schema.ts";
+import {
+  ConfigValidationError,
+  resolveFallbackConfig,
+  validateConfig,
+} from "../../src/config/schema.ts";
 import { SourceManager } from "../../src/core/source-manager.ts";
 import type { MirrorSource } from "../../src/core/types.ts";
 
@@ -35,6 +39,60 @@ describe("proxy configuration", () => {
     expect(() => validateConfig({ proxy: { index_refresh_interval: "soon" } })).toThrow(
       ConfigValidationError,
     );
+  });
+
+  it("should have all fallbacks off by default", () => {
+    const config = validateConfig({});
+    expect(config.proxy?.fallback).toBeUndefined();
+    expect(resolveFallbackConfig(config)).toEqual({
+      github: false,
+      build_wasm: false,
+      toolchain: "auto",
+      moonup: "moonup",
+      github_api: "https://api.github.com",
+    });
+  });
+
+  it("should read the [proxy.fallback] section", () => {
+    const config = validateConfig({
+      proxy: {
+        enabled: true,
+        fallback: {
+          github: true,
+          build_wasm: true,
+          toolchain: "0.6.34+e16ca94e6",
+          moonup: "/opt/moonup/bin/moonup",
+          manifest_url: "https://example.com/manifests",
+        },
+      },
+    });
+    expect(resolveFallbackConfig(config)).toEqual({
+      github: true,
+      build_wasm: true,
+      toolchain: "0.6.34+e16ca94e6",
+      moonup: "/opt/moonup/bin/moonup",
+      manifest_url: "https://example.com/manifests",
+      github_api: "https://api.github.com",
+    });
+    expect(config.proxy?.index_refresh_interval).toBe("10m");
+  });
+
+  it("should reject a bad fallback toolchain or flag", () => {
+    expect(() => validateConfig({ proxy: { fallback: { toolchain: "newest" } } })).toThrow(
+      ConfigValidationError,
+    );
+    expect(() => validateConfig({ proxy: { fallback: { github: "yes" } } })).toThrow(
+      ConfigValidationError,
+    );
+    for (const toolchain of [
+      "auto",
+      "current",
+      "0.1.20251202+abc",
+      "v0.10.15",
+      "nightly-2026-06-17",
+    ]) {
+      expect(() => validateConfig({ proxy: { fallback: { toolchain } } })).not.toThrow();
+    }
   });
 
   it("should keep download_url and symbols_url of a source", () => {
@@ -80,9 +138,35 @@ describe("proxy configuration", () => {
       const loaded = await loadConfig(path);
 
       expect(loaded.proxy).toEqual(config.proxy);
+      expect(loaded.proxy?.fallback).toBeUndefined();
       expect(loaded.sources?.[0].download_url).toBe("https://download.mooncakes.io");
       expect(loaded.sources?.[0].symbols_url).toBe("https://download.mooncakes.io/symbols.zip");
     });
+  });
+});
+
+describe("fallback configuration on disk", () => {
+  let tempDir: string;
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "moonbit-fallback-config-"));
+  });
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it("should write and read back the [proxy.fallback] section", async () => {
+    const config = validateConfig({
+      proxy: {
+        enabled: true,
+        fallback: { github: true, toolchain: "current", manifest_url: "https://m.example.com" },
+      },
+    });
+    const path = join(tempDir, "registry.toml");
+    await saveConfig(config, path);
+    expect(await Bun.file(path).text()).toContain("[proxy.fallback]");
+    const loaded = await loadConfig(path);
+    expect(loaded.proxy).toEqual(config.proxy);
+    expect(resolveFallbackConfig(loaded).github).toBe(true);
   });
 });
 

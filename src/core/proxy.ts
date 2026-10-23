@@ -15,6 +15,7 @@ import { resolveProxyConfig } from "../config/schema.ts";
 import { parseDuration } from "../utils/duration.ts";
 import fs from "../utils/fs.ts";
 import logger from "../utils/logger.ts";
+import { FallbackUnavailable, ProxyFallbacks } from "./fallback.ts";
 import { type PrebuildAsset, findExecutablePackages, wasmArtifactName } from "./prebuild.ts";
 import type { Registry } from "./registry.ts";
 import type { MirrorSource, ProxyConfig } from "./types.ts";
@@ -36,6 +37,8 @@ export class ProxyError extends Error {
 export interface PrebuildPaths {
   wasm: string;
   checksum: string;
+  /** True for a wasm that this proxy built, not one from upstream */
+  builtLocally?: boolean;
 }
 
 export class ProxyCache {
@@ -46,9 +49,12 @@ export class ProxyCache {
   private indexRefreshed = false;
   /** Cached zips whose bytes matched this index checksum in this process */
   private verifiedZips = new Map<string, string>();
+  /** Opt-in fallbacks for files that upstream cannot send */
+  public fallbacks: ProxyFallbacks;
 
   constructor(registry: Registry) {
     this.registry = registry;
+    this.fallbacks = new ProxyFallbacks(registry);
   }
 
   /** The proxy settings, with defaults */
@@ -76,6 +82,29 @@ export class ProxyCache {
       asset.file,
     );
     return { wasm, checksum: `${wasm}.sha256` };
+  }
+
+  /** Where a locally built wasm and its .sha256 are, apart from upstream files */
+  localPrebuildPaths(asset: PrebuildAsset): PrebuildPaths {
+    const wasm = join(
+      this.registry.config.registry.data_dir,
+      DATA_DIRS.PREBUILD_LOCAL,
+      asset.owner,
+      `${asset.name}@${asset.version}`,
+      ...asset.packagePath,
+      asset.file,
+    );
+    return { wasm, checksum: `${wasm}.sha256`, builtLocally: true };
+  }
+
+  /** The cached files of a prebuild: upstream first, then a local build; null on a miss */
+  findCachedPrebuild(asset: PrebuildAsset): PrebuildPaths | null {
+    const cached = (paths: PrebuildPaths) => existsSync(paths.wasm) && existsSync(paths.checksum);
+    const upstream = this.prebuildPaths(asset);
+    if (cached(upstream)) return upstream;
+    const local = this.localPrebuildPaths(asset);
+    if (this.fallbacks.buildWasmEnabled && cached(local)) return local;
+    return null;
   }
 
   /** Get the source to fetch from (the default source unless named) */
@@ -230,7 +259,18 @@ export class ProxyCache {
       const url = this.registry.sourceManager.buildPackageUrl(source, owner, name, version);
       logger.info(`Proxy miss: fetching ${id} from ${source.name}`);
 
-      const data = await this.download(url, source);
+      let data: Uint8Array;
+      let origin = source.name;
+      try {
+        data = await this.download(url, source);
+      } catch (err) {
+        if (!this.fallbacks.githubEnabled) throw err;
+        const rebuilt = await this.rebuildFromGitHub(id, err, () =>
+          this.fallbacks.rebuildZip(owner, name, version, checksum, source.name),
+        );
+        data = rebuilt.zip;
+        origin = `GitHub ${rebuilt.repository.owner}/${rebuilt.repository.repo} tag ${rebuilt.tag}`;
+      }
       const actual = sha256Hex(data);
       if (actual !== expected) {
         throw new ProxyError(
@@ -240,22 +280,51 @@ export class ProxyCache {
       }
       await fs.writeFileAtomic(path, data);
       this.verifiedZips.set(path, expected);
-      logger.info(`Proxy cached ${id} (${data.length} bytes)`);
+      logger.info(`Proxy cached ${id} (${data.length} bytes, from ${origin})`);
       return path;
     });
   }
 
   /**
+   * Run the GitHub fallback after a failed download. When the fallback cannot
+   * run, the download error stays; when it ran and was refused, the result
+   * is 502 and the log says why.
+   */
+  private async rebuildFromGitHub<T>(id: string, downloadError: unknown, run: () => Promise<T>) {
+    logger.warn(
+      `Upstream cannot send ${id} (${errorMessage(downloadError)}), trying a GitHub rebuild`,
+    );
+    try {
+      const result = await run();
+      logger.info(`GitHub rebuild of ${id}: checksum matches the index, serving the rebuild`);
+      return result;
+    } catch (err) {
+      if (err instanceof FallbackUnavailable) {
+        logger.warn(`No GitHub rebuild of ${id}: ${err.message}`);
+        throw downloadError;
+      }
+      logger.error(`GitHub rebuild of ${id} refused, not serving it: ${errorMessage(err)}`);
+      throw new ProxyError(
+        `${errorMessage(downloadError)}; GitHub rebuild refused: ${errorMessage(err)}`,
+        502,
+      );
+    }
+  }
+
+  /**
    * Get the cached prebuilt wasm and .sha256 of an asset, fetching both on a
    * miss. The wasm must match the upstream .sha256, or nothing is cached.
+   * When upstream has no file or cannot be reached and `build_wasm` is on,
+   * the wasm is built locally from the checked source zip.
    */
   async getPrebuild(asset: PrebuildAsset, sourceName?: string): Promise<PrebuildPaths> {
+    const found = this.findCachedPrebuild(asset);
+    if (found) return found;
     const paths = this.prebuildPaths(asset);
-    const cached = () => existsSync(paths.wasm) && existsSync(paths.checksum);
-    if (cached()) return paths;
 
     return this.singleFlight(paths.wasm, async () => {
-      if (cached()) return paths;
+      const again = this.findCachedPrebuild(asset);
+      if (again) return again;
       const source = this.source(sourceName);
       const sm = this.registry.sourceManager;
       const { owner, name, version, packagePath, file } = asset;
@@ -264,12 +333,19 @@ export class ProxyCache {
       logger.info(`Proxy miss: fetching prebuild ${id} from ${source.name}`);
 
       // moon fetches the checksum first, then the wasm; do the same
-      const checksumBytes = await this.download(`${wasmUrl}.sha256`, source);
+      let checksumBytes: Uint8Array;
+      let wasm: Uint8Array;
+      try {
+        checksumBytes = await this.download(`${wasmUrl}.sha256`, source);
+        wasm = parseSha256(checksumBytes) ? await this.download(wasmUrl, source) : new Uint8Array();
+      } catch (err) {
+        if (!(err instanceof ProxyError) || !this.fallbacks.buildWasmEnabled) throw err;
+        return this.buildPrebuild(asset, id, err, source.name);
+      }
       const expected = parseSha256(checksumBytes);
       if (!expected) {
         throw new ProxyError(`Invalid SHA-256 file for prebuild ${id}`, 502);
       }
-      const wasm = await this.download(wasmUrl, source);
       const actual = sha256Hex(wasm);
       if (actual !== expected) {
         throw new ProxyError(
@@ -284,6 +360,58 @@ export class ProxyCache {
       logger.info(`Proxy cached prebuild ${id} (${wasm.length} bytes)`);
       return paths;
     });
+  }
+
+  /**
+   * Build a prebuild locally from the source zip (cached, upstream or GitHub
+   * rebuild, always checked against the index). Only executable packages of
+   * the zip are built. Keeps the download error when the build cannot run.
+   */
+  private async buildPrebuild(
+    asset: PrebuildAsset,
+    id: string,
+    downloadError: ProxyError,
+    sourceName: string,
+  ): Promise<PrebuildPaths> {
+    const { owner, name, version, packagePath, file } = asset;
+    logger.warn(`Upstream has no prebuild ${id} (${downloadError.message}), trying a local build`);
+    if (!(await this.fallbacks.ready())) throw downloadError;
+    const line = await this.registry.indexManager.getIndexLine(owner, name, version, sourceName);
+    if (typeof line?.checksum !== "string") throw downloadError;
+
+    const zipPath = await this.getZip(owner, name, version, line.checksum, sourceName);
+    const zip = new Uint8Array(await readFile(zipPath));
+    const executables = findExecutablePackages(zip);
+    const isExecutable = executables.some((p) => p.join("/") === packagePath.join("/"));
+    if (!isExecutable || wasmArtifactName(name, packagePath) !== file) {
+      logger.warn(`Not building ${id}: it is not an executable package of the module`);
+      throw new ProxyError(`No prebuild ${id}`, 404);
+    }
+
+    let built: { wasm: Uint8Array; toolchain: string };
+    try {
+      built = await this.fallbacks.buildWasm(
+        asset,
+        zip,
+        typeof line.created_at === "string" ? line.created_at : undefined,
+      );
+    } catch (err) {
+      logger.error(`Local build of prebuild ${id} failed: ${errorMessage(err)}`);
+      throw new ProxyError(
+        `${downloadError.message}; local build failed: ${errorMessage(err)}`,
+        502,
+      );
+    }
+
+    const local = this.localPrebuildPaths(asset);
+    const digest = sha256Hex(built.wasm);
+    await fs.writeFileAtomic(local.wasm, built.wasm);
+    await fs.writeFileAtomic(local.checksum, new TextEncoder().encode(`${digest}  ${file}\n`));
+    logger.info(
+      `Proxy built prebuild ${id} locally with toolchain ${built.toolchain} ` +
+        `(${built.wasm.length} bytes, sha256 ${digest}); it is served as built locally`,
+    );
+    return local;
   }
 
   /**

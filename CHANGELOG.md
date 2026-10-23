@@ -33,6 +33,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not change the served index. `mirror --prebuild` also downloads the prebuilt wasm of the
   executable packages in the mirrored zips, when upstream has them.
 - README section "Proxy Mode" and the recipe "Caching Proxy".
+- Archive manifests: one JSON line per version with the entries of the published zip in
+  archive order (path, SHA-256, size), the zip checksum and an order-free `content_digest`.
+  They are stored next to an index at `manifests/user/<owner>/<pkg>.manifest`, which moon does
+  not read. `moonbit-registry manifest <zip>` prints a line; `moonbit-registry manifest build
+  --index <dir> [--packages <glob>...] [--limit N] [--concurrency N]` adds the missing lines
+  (each zip is checked against the index checksum first). It can run again and keeps the
+  index order.
+- Opt-in proxy fallbacks in `[proxy.fallback]`, all off by default:
+  - `github = true`: when upstream cannot send a zip, rebuild it from the GitHub tag
+    (`v<version>` or `<version>`) with `moon package`, put the entries in the published order
+    from the manifest, and serve it only when it is byte-identical to the published zip (its
+    SHA-256 is the index checksum). A mismatch gives `502` and a log of the entries that are
+    different. Without a manifest line there is no rebuild.
+  - `build_wasm = true`: when upstream has no prebuilt wasm or cannot be reached, build it from
+    the checked source zip (`moon build --target wasm --release`, then `moon-wasm-opt -O
+    --all-features` when the toolchain has it). The proxy writes the `.sha256`, keeps these
+    files in `prebuild-local/`, and sends `X-Registry-Built-Locally: true`.
+  - `toolchain = "auto" | "current" | "<version>" | "nightly-YYYY-MM-DD"` and
+    `moonup = "<path>"`: with `auto`, builds
+    use the newest toolchain released before the `created_at` of the version, installed with
+    moonup into a `MOON_HOME` of the proxy. When moonup is missing, the fallbacks log one error
+    and stay off.
+  - `manifest_url`: base URL of manifest files, for an index without `manifests/`.
+  - With a fallback on, file requests have no idle timeout, because a build can take longer
+    than the 10 second default of the server.
+  - Builds do not run package hooks: each moon command gets `MOON_IGNORE_PREBUILD=1` and
+    `MOON_IGNORE_POSTADD=1`, and the proxy logs the hooks that it finds. Toolchains released
+    before 2025-05-29 (and moon binaries that do not know these variables) are refused, so old
+    versions that need them cannot be rebuilt.
+  - Child processes get an environment from an allowlist (no `GITHUB_TOKEN` or other secrets
+    of the proxy), with their own `HOME` and a new `MOON_HOME` for each command.
+  - Before `moon package` runs on a GitHub tag, each file of the manifest must be in the tag
+    with the same SHA-256.
+  - Builds that ask the proxy for a dependency that needs a GitHub rebuild do not deadlock:
+    zip rebuilds do not wait in a queue (one rebuild per version at a time), at most two wasm
+    builds run at the same time, and only moonup installs run one at a time.
 
 ### Fixed
 

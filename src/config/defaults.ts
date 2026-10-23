@@ -15,6 +15,8 @@ export const DATA_DIRS = {
   PACKAGES: "packages",
   /** Prebuilt wasm cached by proxy mode */
   PREBUILD: "prebuild",
+  /** Prebuilt wasm that proxy mode built locally (kept apart from upstream files) */
+  PREBUILD_LOCAL: "prebuild-local",
   /** symbols.zip cached by proxy mode */
   SYMBOLS: "symbols",
 } as const;

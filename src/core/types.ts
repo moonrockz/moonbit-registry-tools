@@ -68,7 +68,37 @@ export interface ProxyConfig {
   index_refresh_interval: string;
   /** How long a cached symbols.zip stays fresh (for example "1d") */
   symbols_max_age: string;
+  /** Opt-in ways to get a file that upstream cannot send */
+  fallback?: Partial<ProxyFallbackConfig>;
 }
+
+/** Proxy fallbacks, all off by default */
+export interface ProxyFallbackConfig {
+  /**
+   * Rebuild a zip from the GitHub tag of its repository. The rebuild is
+   * served only when it is byte-identical to the published zip.
+   */
+  github: boolean;
+  /** Build a prebuilt wasm locally from the package source */
+  build_wasm: boolean;
+  /** Toolchain for builds: "auto" (the toolchain of the publish date), "current", or a version */
+  toolchain: string;
+  /** Path or command name of moonup, which installs the toolchains */
+  moonup: string;
+  /** Base URL of manifest files (`<url>/user/<owner>/<pkg>.manifest`), when the index has none */
+  manifest_url?: string;
+  /** GitHub API base URL for tag tarballs */
+  github_api: string;
+}
+
+/** Default proxy fallback settings */
+export const DEFAULT_PROXY_FALLBACK: ProxyFallbackConfig = {
+  github: false,
+  build_wasm: false,
+  toolchain: "auto",
+  moonup: "moonup",
+  github_api: "https://api.github.com",
+};
 
 /** Registry configuration */
 export interface RegistryConfig {

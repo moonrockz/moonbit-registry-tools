@@ -5,12 +5,13 @@
 import type {
   MirrorSource,
   ProxyConfig,
+  ProxyFallbackConfig,
   RegistryConfig,
   SmartHttpConfig,
   SourceAuth,
   SourceType,
 } from "../core/types.ts";
-import { DEFAULT_CONFIG } from "../core/types.ts";
+import { DEFAULT_CONFIG, DEFAULT_PROXY_FALLBACK } from "../core/types.ts";
 import { parseDuration } from "../utils/duration.ts";
 
 /** Validation error */
@@ -240,6 +241,44 @@ function validateDuration(value: unknown, field: string): string {
   return duration;
 }
 
+/** Validate the [proxy.fallback] section; only the given fields are kept */
+function validateProxyFallback(value: unknown): Partial<ProxyFallbackConfig> {
+  if (typeof value !== "object" || value === null) {
+    throw new ConfigValidationError("Must be an object", "proxy.fallback");
+  }
+  const fallback = value as Record<string, unknown>;
+  const field = (name: string) => `proxy.fallback.${name}`;
+  const result: Partial<ProxyFallbackConfig> = {};
+  if (fallback.github !== undefined) {
+    result.github = validateBoolean(fallback.github, field("github"));
+  }
+  if (fallback.build_wasm !== undefined) {
+    result.build_wasm = validateBoolean(fallback.build_wasm, field("build_wasm"));
+  }
+  if (fallback.toolchain !== undefined) {
+    const toolchain = validateString(fallback.toolchain, field("toolchain"), true);
+    const version = /^v?\d+\.\d+\.\d+\S*$/.test(toolchain);
+    const nightly = /^nightly-\d{4}-\d{2}-\d{2}$/.test(toolchain);
+    if (!["auto", "current"].includes(toolchain) && !version && !nightly) {
+      throw new ConfigValidationError(
+        "Must be 'auto', 'current', a toolchain version such as 0.6.34+e16ca94e6, or nightly-YYYY-MM-DD",
+        field("toolchain"),
+      );
+    }
+    result.toolchain = toolchain;
+  }
+  if (fallback.moonup !== undefined) {
+    result.moonup = validateString(fallback.moonup, field("moonup"), true);
+  }
+  if (fallback.manifest_url !== undefined) {
+    result.manifest_url = validateString(fallback.manifest_url, field("manifest_url"));
+  }
+  if (fallback.github_api !== undefined) {
+    result.github_api = validateString(fallback.github_api, field("github_api"), true);
+  }
+  return result;
+}
+
 /** Validate the proxy section on top of its defaults */
 function validateProxyConfig(value: unknown, defaults: ProxyConfig): ProxyConfig {
   if (typeof value !== "object" || value === null) {
@@ -259,6 +298,14 @@ function validateProxyConfig(value: unknown, defaults: ProxyConfig): ProxyConfig
       proxy.symbols_max_age !== undefined
         ? validateDuration(proxy.symbols_max_age, "proxy.symbols_max_age")
         : defaults.symbols_max_age,
+    ...(proxy.fallback !== undefined || defaults.fallback !== undefined
+      ? {
+          fallback: {
+            ...defaults.fallback,
+            ...(proxy.fallback !== undefined ? validateProxyFallback(proxy.fallback) : {}),
+          },
+        }
+      : {}),
   };
 }
 
@@ -372,6 +419,11 @@ export function validateConfig(raw: unknown): RegistryConfig {
 /** The proxy settings of a config, with defaults for missing values */
 export function resolveProxyConfig(config: RegistryConfig): ProxyConfig {
   return { ...(DEFAULT_CONFIG.proxy as ProxyConfig), ...config.proxy };
+}
+
+/** The proxy fallback settings of a config, with defaults for missing values */
+export function resolveFallbackConfig(config: RegistryConfig): ProxyFallbackConfig {
+  return { ...DEFAULT_PROXY_FALLBACK, ...config.proxy?.fallback };
 }
 
 export default { validateConfig, ConfigValidationError };

@@ -152,6 +152,15 @@ function generateToml(config: RegistryConfig): string {
     lines.push(`index_refresh_interval = "${config.proxy.index_refresh_interval}"`);
     lines.push(`symbols_max_age = "${config.proxy.symbols_max_age}"`);
     lines.push("");
+    const fallback = config.proxy.fallback;
+    if (fallback) {
+      lines.push("[proxy.fallback]");
+      for (const [key, value] of Object.entries(fallback)) {
+        if (value === undefined) continue;
+        lines.push(`${key} = ${typeof value === "string" ? JSON.stringify(value) : value}`);
+      }
+      lines.push("");
+    }
   }
 
   lines.push("[git]");

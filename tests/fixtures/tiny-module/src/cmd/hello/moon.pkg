@@ -1,0 +1,7 @@
+import {
+  "alice/tiny/lib",
+}
+
+options(
+  "is-main": true,
+)
