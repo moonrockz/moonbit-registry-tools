@@ -176,6 +176,29 @@ describe("Registry.mirror", () => {
     expect(published).toBe(appIndex + newLine);
   });
 
+  it("should not publish versions whose archives failed to download", async () => {
+    const registry = await initRegistry();
+    await registry.mirror(options);
+
+    // The new version is in the upstream index, but its zip is missing
+    const newLine = `${JSON.stringify({
+      name: "alice/app",
+      version: "1.2.0",
+      checksum: sha256("app 1.2.0"),
+    })}\n`;
+    await writeFile(join(upstreamIndex, "user", "alice", "app.index"), appIndex + newLine);
+    await $`git -c user.name=t -c user.email=t@t commit -qam release`.cwd(upstreamIndex).quiet();
+
+    await registry.mirror(options);
+
+    expect(registry.packageStore.hasPackage("alice", "app", "1.2.0")).toBe(false);
+    const published = await readFile(
+      join(registry.indexManager.path, "user", "alice", "app.index"),
+      "utf-8",
+    );
+    expect(published).toBe(appIndex);
+  });
+
   it("should not create a commit when nothing changed", async () => {
     const registry = await initRegistry();
     await registry.mirror(options);

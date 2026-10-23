@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `mirror` now publishes the index files of mirrored packages to the served index at
   `user/<owner>/<pkg>.index` (the layout that moon reads) and commits them. Before, the
   served index stayed empty, so `moon update` against the registry found no packages.
+- `mirror` publishes only the versions whose archives it has cached. Before, a version whose
+  download failed (404 or checksum mismatch) was still listed in the served index.
 - `mirror` downloads yanked versions too. moon still selects yanked versions (it only
   warns that they are deprecated), so a mirror without them broke `moon add`.
 - `mirror` (without `--strict`) now includes all transitive dependencies of every mirrored

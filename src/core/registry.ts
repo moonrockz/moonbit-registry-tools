@@ -169,10 +169,12 @@ export class Registry {
       }
     }
 
-    // Publish the index entries of every resolved package where moon reads them
+    // Publish the index entries of every resolved package where moon reads them.
+    // Versions whose archive failed to download are left out.
     const published = await this.indexManager.publishFromSource(
       Array.from(resolution.packages),
       source.name,
+      (username, name, version) => this.packageStore.hasPackage(username, name, version),
     );
     if (published > 0) {
       await this.indexManager.commit(`Mirror ${published} packages from ${source.name}`);

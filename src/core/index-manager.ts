@@ -195,10 +195,16 @@ export class IndexManager {
 
   /**
    * Copy the index files of packages from a source's index into the served
-   * index. The content is copied verbatim so moon sees every upstream field.
+   * index. Each line is copied verbatim so moon sees every upstream field.
+   * When `isCached` is given, only versions whose archive is cached are
+   * published, so the index never advertises a version the mirror cannot serve.
    * Returns the number of package index files that changed.
    */
-  async publishFromSource(packages: string[], sourceName?: string): Promise<number> {
+  async publishFromSource(
+    packages: string[],
+    sourceName?: string,
+    isCached?: (username: string, name: string, version: string) => boolean,
+  ): Promise<number> {
     let changed = 0;
 
     for (const pkgName of packages) {
@@ -211,7 +217,22 @@ export class IndexManager {
         continue;
       }
 
-      const content = await fs.readText(sourcePath);
+      let content = await fs.readText(sourcePath);
+      if (isCached) {
+        const lines = content
+          .split("\n")
+          .filter((line) => line.trim() !== "")
+          .filter((line) => {
+            const version = parseIndexLineVersion(line);
+            // Keep lines that are not version entries as they are
+            return version === null || isCached(pkgId.username, pkgId.name, version);
+          });
+        if (lines.length === 0) {
+          logger.warn(`No cached versions of ${pkgName}, not published`);
+          continue;
+        }
+        content = `${lines.join("\n")}\n`;
+      }
       const targetPath = this.getPackageIndexPath(pkgId.username, pkgId.name);
       if (existsSync(targetPath) && (await fs.readText(targetPath)) === content) {
         continue;
@@ -422,6 +443,16 @@ function matchGlob(str: string, pattern: string): boolean {
 
   const regex = new RegExp(`^${regexPattern}$`);
   return regex.test(str);
+}
+
+/** Get the version of a JSONL index line, or null if the line has none */
+function parseIndexLineVersion(line: string): string | null {
+  try {
+    const entry = JSON.parse(line) as { version?: unknown };
+    return typeof entry.version === "string" ? entry.version : null;
+  } catch {
+    return null;
+  }
 }
 
 export default IndexManager;
