@@ -69,6 +69,52 @@ describe("IndexManager", () => {
     });
   });
 
+  describe("module with a nested module of the same name", () => {
+    // mooncakes.io has moonbitlang/lex (user/moonbitlang/lex.index) and
+    // moonbitlang/lex/runtime (user/moonbitlang/lex/runtime.index)
+    async function writeLexIndex(root: string): Promise<void> {
+      const owner = join(root, "user", "moonbitlang");
+      await Bun.write(
+        join(owner, "lex.index"),
+        '{"name":"moonbitlang/lex","version":"0.1.0","checksum":"aa"}\n',
+      );
+      await Bun.write(
+        join(owner, "lex", "runtime.index"),
+        '{"name":"moonbitlang/lex/runtime","version":"0.1.0","checksum":"bb"}\n',
+      );
+    }
+
+    it("reads the package from a source index, not the directory", async () => {
+      await writeLexIndex(indexManager.getSourceIndexPath("mooncakes"));
+
+      const pkg = await indexManager.getPackageFromSource("moonbitlang", "lex", "mooncakes");
+
+      expect(pkg?.versions.map((v) => v.version)).toEqual(["0.1.0"]);
+    });
+
+    it("reads the package and its index line from the served index", async () => {
+      await writeLexIndex(indexManager.path);
+      await Bun.write(
+        join(indexManager.path, "moonbitlang", "lex", "x"),
+        "legacy layout directory\n",
+      );
+
+      const pkg = await indexManager.getPackage("moonbitlang", "lex");
+      const line = await indexManager.getIndexLine("moonbitlang", "lex", "0.1.0");
+
+      expect(pkg?.versions.map((v) => v.version)).toEqual(["0.1.0"]);
+      expect(line?.checksum).toBe("aa");
+    });
+
+    it("lists only the two-part module", async () => {
+      await writeLexIndex(indexManager.getSourceIndexPath("mooncakes"));
+
+      const packages = await indexManager.listPackagesFromSource("mooncakes");
+
+      expect(packages).toEqual(["moonbitlang/lex"]);
+    });
+  });
+
   describe("getPackageIndexPath", () => {
     it("should return correct path", () => {
       const path = indexManager.getPackageIndexPath("moonbitlang", "core");
