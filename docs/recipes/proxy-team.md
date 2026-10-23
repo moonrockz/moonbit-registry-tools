@@ -165,7 +165,9 @@ systemctl list-timers moonbit-proxy-prefill.timer
 
 The prefill runs while the proxy serves clients. It does not change the served index. It
 downloads only files that are not in the cache, so the first run takes much longer than the
-next runs. Change `moonbitlang/*` to the packages that your team uses.
+next runs. As an example, the first run of `moonbitlang/*` took 25 minutes and about 2 GB:
+1803 versions of 133 packages (with dependencies) and 330 prebuilt wasm files. Change
+`moonbitlang/*` to the packages that your team uses.
 
 ## Step 5 (Optional): Continue When Downloads Fail
 
