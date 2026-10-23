@@ -44,6 +44,8 @@ downloads/
 eggs/
 .eggs/
 lib/
+# Test fixtures are MoonBit modules with lib/ packages
+!tests/fixtures/**/lib/
 lib64/
 parts/
 sdist/
