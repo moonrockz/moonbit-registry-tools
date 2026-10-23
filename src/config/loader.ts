@@ -38,7 +38,7 @@ export async function loadConfig(configPath?: string): Promise<RegistryConfig> {
 
   if (!path || !existsSync(path)) {
     logger.debug("No config file found, using defaults");
-    return { ...DEFAULT_CONFIG };
+    return structuredClone(DEFAULT_CONFIG);
   }
 
   logger.debug(`Loading config from ${path}`);

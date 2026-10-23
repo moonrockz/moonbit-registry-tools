@@ -7,7 +7,9 @@ import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { loadConfig } from "../../src/config/loader.ts";
 import { Registry } from "../../src/core/registry.ts";
+import { DEFAULT_CONFIG } from "../../src/core/types.ts";
 
 describe("Registry", () => {
   let tempDir: string;
@@ -26,6 +28,16 @@ describe("Registry", () => {
 
       expect(registry.config.registry.name).toBe("test-registry");
       expect(registry.rootDir).toBe(tempDir);
+    });
+
+    it("should not share config objects with DEFAULT_CONFIG", async () => {
+      // A shared object let one registry's changes leak into later registries
+      const registry = await Registry.init(tempDir);
+      registry.config.server.smart_http = { enabled: false };
+      registry.config.git.branch = "changed";
+
+      expect(DEFAULT_CONFIG.server.smart_http?.enabled).toBe(true);
+      expect(DEFAULT_CONFIG.git.branch).toBe("main");
     });
 
     it("should create registry.toml config file", async () => {
@@ -56,6 +68,13 @@ describe("Registry", () => {
       const loaded = await Registry.load(tempDir);
 
       expect(loaded.config.registry.name).toBe("existing-registry");
+    });
+
+    it("should not share defaults when no config file exists", async () => {
+      const config = await loadConfig(join(tempDir, "missing.toml"));
+      config.server.smart_http = { enabled: false };
+
+      expect(DEFAULT_CONFIG.server.smart_http?.enabled).toBe(true);
     });
 
     it("should enable smart HTTP for configs written before it existed", async () => {

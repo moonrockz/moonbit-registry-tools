@@ -71,11 +71,12 @@ export class Registry {
     const rootDir = resolve(dir);
     await fs.ensureDir(rootDir);
 
-    // Create config
+    // Create config from a deep copy, so changes do not leak into DEFAULT_CONFIG
+    const defaults = structuredClone(DEFAULT_CONFIG);
     const config: RegistryConfig = {
-      ...DEFAULT_CONFIG,
+      ...defaults,
       registry: {
-        ...DEFAULT_CONFIG.registry,
+        ...defaults.registry,
         name: name ?? "local-registry",
         data_dir: join(rootDir, "data"),
       },
