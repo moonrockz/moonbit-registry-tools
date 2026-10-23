@@ -4,6 +4,7 @@
 
 import { Command } from "commander";
 import { setLogLevel, setQuiet } from "../utils/logger.ts";
+import { VERSION } from "../version.ts";
 import { registerConfigCommand } from "./commands/config.ts";
 import { registerInitCommand } from "./commands/init.ts";
 import { registerManifestCommand } from "./commands/manifest.ts";
@@ -19,7 +20,7 @@ export function createCli(): Command {
   program
     .name("moonbit-registry")
     .description("CLI tool for managing MoonBit registries")
-    .version("0.1.0")
+    .version(VERSION)
     .option("-v, --verbose", "Enable verbose logging")
     .option("-q, --quiet", "Suppress non-essential output")
     .hook("preAction", (thisCommand) => {

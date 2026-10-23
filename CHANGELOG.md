@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-23
+
 ### Added
 
 - Caching proxy mode: `serve --proxy` or `[proxy] enabled = true`. The served index is a full
@@ -71,6 +73,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     builds run at the same time, and only moonup installs run one at a time.
 
 ### Fixed
+
+- `moonbit-registry --version` and the `version` field of `GET /` showed `0.1.0` in all
+  releases. Both now come from `package.json`.
 
 - The saved `registry.toml` put `default_source` after the `[[sources]]` tables, so TOML read it
   as a key of the last source and the first source became the default. `default_source` is now
@@ -210,7 +215,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Changelog in keepachangelog format with release notes automation
 - Expanded README with getting started scenarios and configuration examples
 
-[Unreleased]: https://github.com/moonrockz/moonbit-registry-tools/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/moonrockz/moonbit-registry-tools/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/moonrockz/moonbit-registry-tools/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/moonrockz/moonbit-registry-tools/compare/v0.2.5...v0.3.0
 [0.2.5]: https://github.com/moonrockz/moonbit-registry-tools/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/moonrockz/moonbit-registry-tools/compare/v0.2.3...v0.2.4

@@ -110,10 +110,11 @@ git push origin vX.Y.Z
 **Check**:
 ```bash
 grep '"version"' package.json
-grep '.version(' src/cli/index.ts
+moonbit-registry --version
 ```
 
-**Fix**: Update both files to match, commit, re-release
+**Fix**: The CLI reads `package.json` through `src/version.ts`. A difference means that the
+binary was built from another commit: build again from the tagged commit, re-release
 
 ---
 
@@ -186,14 +187,5 @@ run_windows = "powershell -ExecutionPolicy Bypass -File .mise/tasks/release-bump
 
 ### CI Enhancements
 
-Consider adding to `.github/workflows/ci.yml`:
-```yaml
-- name: Check version consistency
-  run: |
-    PKG_VERSION=$(jq -r .version package.json)
-    CLI_VERSION=$(grep -oP '\.version\("\K[^"]+' src/cli/index.ts)
-    if [ "$PKG_VERSION" != "$CLI_VERSION" ]; then
-      echo "Version mismatch: package.json=$PKG_VERSION, CLI=$CLI_VERSION"
-      exit 1
-    fi
-```
+`tests/cli/commands.test.ts` and `tests/server/routes.test.ts` check that `--version` and
+`GET /` give the version of `package.json`.
