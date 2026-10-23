@@ -86,6 +86,13 @@ export function createServer(registry: Registry, options: ServerOptions = {}) {
 
     // Git index routes
     if (pathname.startsWith("/git/index")) {
+      // moon keeps the index it clones, so do not hand out an empty one
+      if (registry.proxy.enabled && !registry.proxy.indexReady) {
+        return new Response("Proxy index is not ready yet, try again soon\n", {
+          status: 503,
+          headers: { "Retry-After": "10", "Content-Type": "text/plain" },
+        });
+      }
       const response = await gitRoutes(request, pathname);
       if (response) return response;
     }

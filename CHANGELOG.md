@@ -12,7 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Caching proxy mode: `serve --proxy` or `[proxy] enabled = true`. The served index is a full
   copy of the index of the default source, refreshed on start and every
   `index_refresh_interval` (default `10m`) without blocking requests. When a refresh fails,
-  the proxy logs a warning and serves the last index.
+  the proxy logs a warning and serves the last index. Until the first refresh ends (and no
+  index from an earlier run exists), `/git/index` answers `503` with `Retry-After`, so that a
+  client does not clone and keep an empty index.
 - In proxy mode, the server downloads files from the default source on the first request and
   caches them: package zips (both URL forms), prebuilt wasm at `/prebuild/...` and the legacy
   `/assets/...` path (with the `.sha256` files), and `symbols.zip` (fresh for

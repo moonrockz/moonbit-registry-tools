@@ -263,4 +263,40 @@ describe("Proxy routes", () => {
       expect(host.hitCount("/symbols.zip")).toBe(0);
     });
   });
+
+  describe("index readiness", () => {
+    const refs = "/git/index/info/refs?service=git-upload-pack";
+
+    it("should answer 503 for the git index until the first refresh ends", async () => {
+      // A client that clones during the first refresh must not get an empty index
+      const fresh = await Registry.init(join(tempDir, "fresh"));
+      const source = registry.sourceManager.getSource("fake");
+      if (!source) throw new Error("fake source is missing");
+      fresh.addSource({ ...source });
+      fresh.setDefaultSource("fake");
+      fresh.config.proxy = { enabled: true, index_refresh_interval: "10m", symbols_max_age: "1d" };
+      const freshHandler = createServer(fresh, { port: 0 }).handler;
+
+      const before = await freshHandler(new Request(`http://localhost${refs}`));
+      expect(before.status).toBe(503);
+      expect(before.headers.get("Retry-After")).not.toBeNull();
+
+      await fresh.proxy.refreshIndex();
+      const after = await freshHandler(new Request(`http://localhost${refs}`));
+      expect(after.status).toBe(200);
+    });
+
+    it("should serve the index of an earlier run before the refresh", async () => {
+      const restarted = await Registry.load(registry.rootDir);
+      restarted.config.proxy = {
+        enabled: true,
+        index_refresh_interval: "10m",
+        symbols_max_age: "1d",
+      };
+      const restartedHandler = createServer(restarted, { port: 0 }).handler;
+
+      const response = await restartedHandler(new Request(`http://localhost${refs}`));
+      expect(response.status).toBe(200);
+    });
+  });
 });

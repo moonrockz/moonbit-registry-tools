@@ -43,6 +43,7 @@ export class ProxyCache {
   private inflight = new Map<string, Promise<unknown>>();
   private refreshing: Promise<boolean> | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
+  private indexRefreshed = false;
 
   constructor(registry: Registry) {
     this.registry = registry;
@@ -91,6 +92,14 @@ export class ProxyCache {
   // Index
 
   /**
+   * Whether the served index has content: from an earlier run, or from a
+   * refresh in this process. Before that, a clone gets an empty index.
+   */
+  get indexReady(): boolean {
+    return this.indexRefreshed || existsSync(join(this.registry.indexManager.path, "user"));
+  }
+
+  /**
    * Copy the full index of the default source into the served index and
    * commit it on main. Concurrent calls share one refresh. On failure the
    * served index stays as it was; returns false and logs a warning.
@@ -118,6 +127,7 @@ export class ProxyCache {
         logger.debug(`Proxy index of ${source.name} is up to date`);
       }
       await indexManager.updateServerInfo();
+      this.indexRefreshed = true;
       return true;
     } catch (err) {
       logger.warn(`Proxy index refresh failed, serving the last index: ${errorMessage(err)}`);

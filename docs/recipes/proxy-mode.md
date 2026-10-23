@@ -54,8 +54,10 @@ moonbit-registry source default moonrockz
 moonbit-registry serve --proxy --port 8080
 ```
 
-The first start clones the upstream index (some tens of MB). Wait for `Proxy index is ready`
-before the first `moon update`.
+The first start clones the upstream index (some tens of MB). Until the server logs
+`Proxy index is ready`, it answers `503` for `/git/index`, so `moon update` fails and does not
+keep an empty index. Run `moon update` again after that message. A restart with an index from
+an earlier run serves that index at once.
 
 To make proxy mode the default, add this to `registry.toml`:
 
