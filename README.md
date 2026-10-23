@@ -259,6 +259,13 @@ moonbit-registry sync --pull
 In proxy mode, `serve` is a caching proxy for an upstream registry. Use it on your machine or
 on your LAN when you want the full registry but do not want to download it all first.
 
+Step-by-step recipes: [Personal Proxy](https://moonrockz.github.io/moonbit-registry-tools/recipes/proxy-personal),
+[Team Proxy](https://moonrockz.github.io/moonbit-registry-tools/recipes/proxy-team),
+[Corporate Network](https://moonrockz.github.io/moonbit-registry-tools/recipes/proxy-corporate)
+(mooncakes.io blocked, egress proxy, no internet),
+[mooncakes.io Outage](https://moonrockz.github.io/moonbit-registry-tools/recipes/proxy-outage) and
+[CI/CD Cache](https://moonrockz.github.io/moonbit-registry-tools/recipes/ci-cd-cache).
+
 - The served index is a full copy of the index of the default source: all packages and all
   versions, with each line copied as it is. The proxy refreshes the index when it starts and
   then on `index_refresh_interval` (default 10 minutes). Requests do not wait for a refresh.
