@@ -136,6 +136,7 @@ moonbit-registry update --mooncakes
 ```
 
 This runs `moon update` with the `MOONCAKES_REGISTRY` environment variable set to your private registry URL.
+If `$MOON_HOME/config.json` exists, moon ignores that variable (see below).
 
 #### Manual Configuration
 
@@ -170,6 +171,23 @@ environment variable, write:
   (part of a normal git install). Smart HTTP is on by default (`[server.smart_http]`).
   Static hosting with the dumb HTTP protocol (for example GitHub Pages) does not work.
 - moon fetches only the `main` branch of the index. Keep `git.branch = "main"`.
+
+#### Index Without a Server
+
+You can also keep the index in a git repository on GitHub and use no server.
+A GitHub repository URL supports Smart HTTP and shallow fetches. The repository must
+have a branch named `main`. The workflow templates below push a mirrored index to such a
+repository. Then each client writes `$MOON_HOME/config.json`:
+
+```json
+{
+  "api": "https://mooncakes.io",
+  "index": "https://github.com/moonrockz/mooncakes-index.git",
+  "download": "https://download.mooncakes.io"
+}
+```
+
+In this setup, moon downloads the package archives from the upstream download host.
 
 ### View/Modify Configuration
 
@@ -415,11 +433,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .moonbit-registry
-          key: moonbit-packages-${{ hashFiles('moon.mod.json') }}
+          key: moonbit-packages-${{ hashFiles('moon.mod') }}
 
       - name: Start local registry
         run: |
           moonbit-registry init .moonbit-registry 2>/dev/null || true
+          moonbit-registry source add mooncakes --from-preset mooncakes -d .moonbit-registry 2>/dev/null || true
+          moonbit-registry mirror -d .moonbit-registry "moonbitlang/core"
           moonbit-registry serve -d .moonbit-registry &
           sleep 2
 
@@ -517,13 +537,23 @@ We provide ready-to-use workflow templates in [`.github/workflows/templates/`](.
 
 | Template | Description |
 |----------|-------------|
-| [`mirror-registry.yml`](.github/workflows/templates/mirror-registry.yml) | Create a public mirror deployed to GitHub Pages |
+| [`mirror-registry.yml`](.github/workflows/templates/mirror-registry.yml) | Mirror the mooncakes.io index to branch `main` of a git repository on GitHub |
 | [`ci-with-cache.yml`](.github/workflows/templates/ci-with-cache.yml) | CI workflow with package caching |
-| [`private-registry.yml`](.github/workflows/templates/private-registry.yml) | Private registry with multiple sources |
+| [`private-registry.yml`](.github/workflows/templates/private-registry.yml) | Private, curated index of approved packages in a private git repository |
 
 Copy the template to your repository's `.github/workflows/` directory and customize as needed.
+The header comment of each template lists the setup steps.
+
+Do not deploy the index to GitHub Pages or another static host. Static hosts use the dumb
+HTTP protocol, and current moon fails with
+`dumb http transport does not support shallow capabilities`.
 
 ### Example: Complete Mirror Setup
+
+The mirror job checks out the index repository into the registry's `data/index` directory,
+mirrors into it, and pushes to `main` with a deploy key. The secret `INDEX_DEPLOY_KEY`
+holds the private half of a deploy key with write access to the index repository.
+In an organization, first allow deploy keys: Settings > Member privileges > Deploy keys.
 
 ```yaml
 name: Mirror Registry
@@ -534,15 +564,24 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pages: write
-  id-token: write
+  contents: read
 
 jobs:
   mirror:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout index repository
+        uses: actions/checkout@v4
+        with:
+          repository: my-org/mooncakes-index
+          ref: main
+          ssh-key: ${{ secrets.INDEX_DEPLOY_KEY }}
+          path: .registry/data/index
+
+      - name: Configure git
+        run: |
+          git -C .registry/data/index config user.name "github-actions[bot]"
+          git -C .registry/data/index config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Initialize registry
         uses: moonrockz/moonbit-registry-tools@main
@@ -567,13 +606,12 @@ jobs:
           full: 'true'
           verbose: 'true'
 
-      - name: Deploy to GitHub Pages
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: .registry/data
-
-      - uses: actions/deploy-pages@v4
+      - name: Push index
+        run: git -C .registry/data/index push origin HEAD:main
 ```
+
+Clients then use the `config.json` from [Index Without a Server](#index-without-a-server),
+with `index` set to the URL of your index repository.
 
 ### Publishing Packages (Coming Soon)
 

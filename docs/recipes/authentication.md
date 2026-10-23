@@ -127,7 +127,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      PRIVATE_REGISTRY_TOKEN: ${{ secrets.PRIVATE_REGISTRY_TOKEN }}
+      PRIVATE_REGISTRY_TOKEN: {% raw %}${{ secrets.PRIVATE_REGISTRY_TOKEN }}{% endraw %}
 
     steps:
       - uses: actions/checkout@v4

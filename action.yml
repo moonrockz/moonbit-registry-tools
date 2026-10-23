@@ -284,7 +284,7 @@ runs:
           SOURCE_ARGS="$SOURCE_ARGS --url ${{ inputs.source-url }}"
         fi
 
-        moonbit-registry $ARGS source add $SOURCE_ARGS
+        moonbit-registry source add $ARGS $SOURCE_ARGS
 
     - name: Run config command
       if: inputs.command == 'config'
@@ -298,10 +298,10 @@ runs:
 
         if [ -n "${{ inputs.config-key }}" ]; then
           if [ -n "${{ inputs.config-value }}" ]; then
-            moonbit-registry $ARGS config "${{ inputs.config-key }}" "${{ inputs.config-value }}"
+            moonbit-registry config $ARGS "${{ inputs.config-key }}" "${{ inputs.config-value }}"
           else
-            moonbit-registry $ARGS config "${{ inputs.config-key }}"
+            moonbit-registry config $ARGS "${{ inputs.config-key }}"
           fi
         else
-          moonbit-registry $ARGS config
+          moonbit-registry config $ARGS
         fi

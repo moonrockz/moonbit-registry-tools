@@ -136,6 +136,9 @@ Each developer adds to their shell profile:
 export MOONCAKES_REGISTRY=http://registry.team.local:8080
 ```
 
+{: .note }
+When `$MOON_HOME/config.json` (default `~/.moon/config.json`) exists, moon ignores `MOONCAKES_REGISTRY`. Remove that file, or put the server URLs in it: `"api"` and `"download"` are `http://registry.team.local:8080`, and `"index"` is `http://registry.team.local:8080/git/index`.
+
 ---
 
 ## Sharing the Index via Git
@@ -163,13 +166,41 @@ moonbit-registry sync --pull
 moonbit-registry mirror "new/package"
 ```
 
+### Clients Can Use the Git Repository as the Index
+
+If the remote is a GitHub repository with a `main` branch, moon can clone the index from it
+directly. GitHub supports the Smart HTTP shallow fetches that moon needs. Each client writes
+`$MOON_HOME/config.json`:
+
+```json
+{
+  "api": "https://mooncakes.io",
+  "index": "https://github.com/your-org/registry-index.git",
+  "download": "http://registry.team.local:8080"
+}
+```
+
+`download` must be a host that serves the package archives, for example your team server or
+`https://download.mooncakes.io` for packages from mooncakes.io.
+
+{: .warning }
+Do not publish the index on GitHub Pages or another static host. Static hosts use the dumb HTTP
+protocol, and current moon fails with `dumb http transport does not support shallow capabilities`.
+
 ---
 
 ## Docker Deployment
 
+The server needs `git` (with `git-http-backend`) for Smart HTTP. The release binary needs glibc,
+so use a Debian-based image, not Alpine.
+
 ```dockerfile
 # Dockerfile
-FROM oven/bun:1.0-alpine
+FROM debian:bookworm-slim
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends git ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY dist/moonbit-registry /usr/local/bin/

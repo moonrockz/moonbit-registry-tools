@@ -69,6 +69,12 @@ The `serve` command starts an HTTP server that exposes:
 
 This allows `moon` to consume your local registry just like the official one.
 
+The server serves the index with the Git Smart HTTP protocol (on by default). Current `moon`
+clones the index with `git clone --depth 1 --single-branch --no-tags` and updates it with
+`git fetch --depth=1 origin +refs/heads/main:refs/remotes/origin/main`. These shallow commands
+need Smart HTTP and a branch named `main`. The dumb HTTP protocol of static hosts (for example
+GitHub Pages) cannot do shallow fetches, so `moon` cannot use an index on a static host.
+
 ---
 
 ## Client configuration
@@ -83,6 +89,23 @@ moonbit-registry update
 export MOONCAKES_REGISTRY=http://localhost:8080
 moon update
 ```
+
+With `MOONCAKES_REGISTRY=<url>`, `moon` clones the index from `<url>/git/index` and downloads
+archives from `<url>/user/...`.
+
+`moon` also reads `$MOON_HOME/config.json` (default `~/.moon/config.json`). When that file exists,
+`moon` ignores `MOONCAKES_REGISTRY`. The file sets each URL separately:
+
+```json
+{
+  "api": "https://mooncakes.io",
+  "index": "https://github.com/moonrockz/mooncakes-index.git",
+  "download": "https://download.mooncakes.io"
+}
+```
+
+This example uses an index in a GitHub repository and the archives on the mooncakes.io download
+host. The `mirror-registry.yml` workflow template keeps such an index repository up to date.
 
 ---
 
