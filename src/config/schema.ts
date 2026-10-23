@@ -4,12 +4,14 @@
 
 import type {
   MirrorSource,
+  ProxyConfig,
   RegistryConfig,
   SmartHttpConfig,
   SourceAuth,
   SourceType,
 } from "../core/types.ts";
 import { DEFAULT_CONFIG } from "../core/types.ts";
+import { parseDuration } from "../utils/duration.ts";
 
 /** Validation error */
 export class ConfigValidationError extends Error {
@@ -181,6 +183,14 @@ function validateMirrorSource(value: unknown, index: number): MirrorSource {
       source.package_url_pattern !== undefined
         ? validateString(source.package_url_pattern, field("package_url_pattern"))
         : undefined,
+    download_url:
+      source.download_url !== undefined
+        ? validateString(source.download_url, field("download_url"))
+        : undefined,
+    symbols_url:
+      source.symbols_url !== undefined
+        ? validateString(source.symbols_url, field("symbols_url"))
+        : undefined,
     enabled:
       source.enabled !== undefined ? validateBoolean(source.enabled, field("enabled")) : true,
     auth: validateSourceAuth(source.auth, field("auth")),
@@ -216,6 +226,39 @@ function validateSmartHttpConfig(value: unknown, field: string): SmartHttpConfig
       config.git_http_backend_path !== undefined
         ? validateString(config.git_http_backend_path, `${field}.git_http_backend_path`)
         : undefined,
+  };
+}
+
+/** Validate a duration string such as "10m" */
+function validateDuration(value: unknown, field: string): string {
+  const duration = validateString(value, field, true);
+  try {
+    parseDuration(duration);
+  } catch {
+    throw new ConfigValidationError("Must be a duration such as 30s, 10m, 1h or 1d", field);
+  }
+  return duration;
+}
+
+/** Validate the proxy section on top of its defaults */
+function validateProxyConfig(value: unknown, defaults: ProxyConfig): ProxyConfig {
+  if (typeof value !== "object" || value === null) {
+    throw new ConfigValidationError("Must be an object", "proxy");
+  }
+  const proxy = value as Record<string, unknown>;
+  return {
+    enabled:
+      proxy.enabled !== undefined
+        ? validateBoolean(proxy.enabled, "proxy.enabled")
+        : defaults.enabled,
+    index_refresh_interval:
+      proxy.index_refresh_interval !== undefined
+        ? validateDuration(proxy.index_refresh_interval, "proxy.index_refresh_interval")
+        : defaults.index_refresh_interval,
+    symbols_max_age:
+      proxy.symbols_max_age !== undefined
+        ? validateDuration(proxy.symbols_max_age, "proxy.symbols_max_age")
+        : defaults.symbols_max_age,
   };
 }
 
@@ -304,6 +347,11 @@ export function validateConfig(raw: unknown): RegistryConfig {
     }
   }
 
+  // Validate proxy section
+  if (config.proxy !== undefined) {
+    result.proxy = validateProxyConfig(config.proxy, resolveProxyConfig(result));
+  }
+
   // Validate git section
   if (config.git && typeof config.git === "object") {
     const git = config.git as Record<string, unknown>;
@@ -319,6 +367,11 @@ export function validateConfig(raw: unknown): RegistryConfig {
   }
 
   return result;
+}
+
+/** The proxy settings of a config, with defaults for missing values */
+export function resolveProxyConfig(config: RegistryConfig): ProxyConfig {
+  return { ...(DEFAULT_CONFIG.proxy as ProxyConfig), ...config.proxy };
 }
 
 export default { validateConfig, ConfigValidationError };

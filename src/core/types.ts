@@ -45,6 +45,10 @@ export interface MirrorSource {
   index_url: string;
   index_type: "git" | "http";
   package_url_pattern?: string;
+  /** Base URL for zips and prebuilt wasm (`<download_url>/user/...`, `<download_url>/prebuild/...`) */
+  download_url?: string;
+  /** URL of the registry-wide symbol database */
+  symbols_url?: string;
   enabled: boolean;
   auth?: SourceAuth;
   priority?: number;
@@ -54,6 +58,16 @@ export interface MirrorSource {
 export interface SmartHttpConfig {
   enabled: boolean;
   git_http_backend_path?: string;
+}
+
+/** Proxy mode configuration */
+export interface ProxyConfig {
+  /** Serve the full index of the default source and fetch files on a cache miss */
+  enabled: boolean;
+  /** How often to refresh the index from the default source (for example "10m") */
+  index_refresh_interval: string;
+  /** How long a cached symbols.zip stays fresh (for example "1d") */
+  symbols_max_age: string;
 }
 
 /** Registry configuration */
@@ -83,6 +97,8 @@ export interface RegistryConfig {
     base_url: string;
     smart_http?: SmartHttpConfig;
   };
+  /** Caching proxy mode */
+  proxy?: ProxyConfig;
   git: {
     remote_url: string;
     branch: string;
@@ -115,6 +131,11 @@ export const DEFAULT_CONFIG: RegistryConfig = {
       enabled: true,
     },
   },
+  proxy: {
+    enabled: false,
+    index_refresh_interval: "10m",
+    symbols_max_age: "1d",
+  },
   git: {
     remote_url: "",
     branch: "main",
@@ -130,6 +151,8 @@ export interface MirrorOptions {
   quiet: boolean;
   /** Name of source to mirror from (uses default if not specified) */
   source?: string;
+  /** Also fetch the prebuilt wasm of executable packages */
+  prebuild?: boolean;
 }
 
 /** Result of dependency resolution */

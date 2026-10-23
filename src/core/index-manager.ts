@@ -6,7 +6,8 @@
  */
 
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { DATA_DIRS } from "../config/defaults.ts";
 import fs from "../utils/fs.ts";
 import git from "../utils/git.ts";
@@ -133,6 +134,108 @@ export class IndexManager {
         `Failed to clone index from ${source.name} (${source.index_url}): ${result.stderr}`,
       );
     }
+  }
+
+  /**
+   * Fetch the newest commit of branch main of a source's git index into
+   * `sources/<name>`, as moon does: a shallow, single-branch fetch followed by
+   * a hard reset, so upstream history rewrites do not break the update.
+   * Throws when the index cannot be fetched; the old copy stays in place.
+   */
+  async fetchSourceIndex(sourceName: string): Promise<string> {
+    const source = this.getSourceForSync(sourceName);
+    if (source.index_type !== "git") {
+      throw new Error(`Source '${source.name}' does not have a git index`);
+    }
+    const indexPath = this.getSourceIndexPath(sourceName);
+    const branch = "main";
+
+    if (!(await git.isRepo(indexPath))) {
+      const tempPath = `${indexPath}.tmp-${process.pid}-${Date.now()}`;
+      await fs.ensureDir(join(indexPath, ".."));
+      const result = await git.run([
+        "clone",
+        "--depth",
+        "1",
+        "--single-branch",
+        "--no-tags",
+        "--branch",
+        branch,
+        source.index_url,
+        tempPath,
+      ]);
+      if (!result.success) {
+        await fs.remove(tempPath);
+        throw new Error(`Failed to clone index from ${source.name}: ${result.stderr}`);
+      }
+      await fs.remove(indexPath);
+      await rename(tempPath, indexPath);
+      return this.headCommit(indexPath);
+    }
+
+    await git.run(["remote", "set-url", "origin", source.index_url], indexPath);
+    const fetched = await git.run(
+      [
+        "fetch",
+        "--depth=1",
+        "--no-tags",
+        "origin",
+        `+refs/heads/${branch}:refs/remotes/origin/${branch}`,
+      ],
+      indexPath,
+    );
+    if (!fetched.success) {
+      throw new Error(`Failed to fetch index from ${source.name}: ${fetched.stderr}`);
+    }
+    const reset = await git.run(
+      ["reset", "--hard", "-q", `refs/remotes/origin/${branch}`],
+      indexPath,
+    );
+    if (!reset.success) {
+      throw new Error(`Failed to update index of ${source.name}: ${reset.stderr}`);
+    }
+    return this.headCommit(indexPath);
+  }
+
+  private async headCommit(repoPath: string): Promise<string> {
+    const result = await git.run(["rev-parse", "HEAD"], repoPath);
+    return result.success ? result.stdout : "";
+  }
+
+  /**
+   * Make the served index an exact copy of a source's index: every file is
+   * copied verbatim and files that the source does not have are removed.
+   * Returns the number of files written or removed.
+   */
+  async mirrorSourceIndex(sourceName: string): Promise<number> {
+    const sourcePath = this.getSourceIndexPath(sourceName);
+    const sourceFiles = await listIndexFiles(sourcePath, []);
+    const servedFiles = await listIndexFiles(this.indexDir, ["sources"]);
+    let changed = 0;
+
+    for (const relPath of sourceFiles) {
+      const content = await readFile(join(sourcePath, relPath));
+      const target = join(this.indexDir, relPath);
+      if (servedFiles.has(relPath) && content.equals(await readFile(target))) {
+        continue;
+      }
+      // Write to a temporary file and rename, so readers never see a partial file
+      await fs.ensureDir(dirname(target));
+      const temp = `${target}.tmp-${process.pid}`;
+      await writeFile(temp, content);
+      await rename(temp, target);
+      changed++;
+    }
+
+    for (const relPath of servedFiles) {
+      if (!sourceFiles.has(relPath)) {
+        await fs.remove(join(this.indexDir, relPath));
+        changed++;
+      }
+    }
+
+    logger.debug(`Mirrored index of ${sourceName}: ${changed} files changed`);
+    return changed;
   }
 
   /** Sync an HTTP-based index (placeholder for future implementation) */
@@ -443,6 +546,24 @@ function matchGlob(str: string, pattern: string): boolean {
 
   const regex = new RegExp(`^${regexPattern}$`);
   return regex.test(str);
+}
+
+/** List the files of an index work tree (relative, with `/`), without `.git` */
+async function listIndexFiles(dir: string, skipTop: string[]): Promise<Set<string>> {
+  const files = new Set<string>();
+  async function walk(current: string, prefix: string): Promise<void> {
+    for (const entry of await readdir(current, { withFileTypes: true })) {
+      if (prefix === "" && (entry.name === ".git" || skipTop.includes(entry.name))) continue;
+      const relPath = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
+      if (entry.isDirectory()) {
+        await walk(join(current, entry.name), relPath);
+      } else if (entry.isFile()) {
+        files.add(relPath);
+      }
+    }
+  }
+  if (existsSync(dir)) await walk(dir, "");
+  return files;
 }
 
 /** Get the version of a JSONL index line, or null if the line has none */

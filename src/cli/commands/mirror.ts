@@ -3,6 +3,7 @@
  */
 
 import type { Command } from "commander";
+import { resolveProxyConfig } from "../../config/schema.ts";
 import { Registry } from "../../core/registry.ts";
 import type { MirrorOptions } from "../../core/types.ts";
 import logger, { setQuiet } from "../../utils/logger.ts";
@@ -14,6 +15,8 @@ interface MirrorCommandOptions {
   quiet?: boolean;
   dir?: string;
   source?: string;
+  prebuild?: boolean;
+  proxy?: boolean;
 }
 
 export function registerMirrorCommand(program: Command): void {
@@ -25,6 +28,8 @@ export function registerMirrorCommand(program: Command): void {
     .option("-q, --quiet", "Suppress warnings about skipped dependencies")
     .option("-d, --dir <path>", "Registry directory (default: current directory)")
     .option("-s, --source <name>", "Source to mirror from (uses default if not specified)")
+    .option("--prebuild", "Also fetch the prebuilt wasm of executable packages")
+    .option("--proxy", "Proxy mode: fill the cache only and do not change the served index")
     .action(async (patterns: string[], options: MirrorCommandOptions) => {
       try {
         if (options.quiet) {
@@ -33,6 +38,9 @@ export function registerMirrorCommand(program: Command): void {
 
         const registryPath = resolvePath(options.dir ?? ".");
         const registry = await Registry.load(registryPath);
+        if (options.proxy) {
+          registry.config.proxy = { ...resolveProxyConfig(registry.config), enabled: true };
+        }
 
         let patternsToUse = patterns;
         if (!options.full && patterns.length === 0) {
@@ -56,6 +64,7 @@ export function registerMirrorCommand(program: Command): void {
           strict: options.strict ?? false,
           quiet: options.quiet ?? false,
           source: options.source,
+          prebuild: options.prebuild ?? false,
         };
 
         const sourceName =
@@ -63,6 +72,9 @@ export function registerMirrorCommand(program: Command): void {
         logger.info(`Mirroring packages from '${sourceName}'${options.full ? " (full)" : ""}`);
         if (!options.full) {
           logger.info(`Patterns: ${patternsToUse.join(", ")}`);
+        }
+        if (registry.proxy.enabled) {
+          logger.info("Proxy mode: filling the cache, the served index is not changed");
         }
         if (options.strict) {
           logger.info("Strict mode: dependencies will not be automatically included");

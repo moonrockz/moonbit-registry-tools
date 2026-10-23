@@ -1,6 +1,10 @@
 # MoonBit Registry Configuration Example
 # Copy this file to registry.toml and customize for your needs
 
+# Default source for mirroring and for proxy mode. This is a top-level key:
+# keep it before the first [table], or TOML puts it in that table.
+default_source = "mooncakes"
+
 [registry]
 # Name for your registry (used in logs and identification)
 name = "my-company-registry"
@@ -31,8 +35,24 @@ type = "mooncakes"
 url = "https://mooncakes.io"
 index_url = "https://mooncakes.io/git/index"
 index_type = "git"
+# Base URL for zips (<download_url>/user/...) and prebuilt wasm (<download_url>/prebuild/...)
+download_url = "https://download.mooncakes.io"
+# Registry-wide symbol database that `moon update` fetches
+symbols_url = "https://download.mooncakes.io/symbols.zip"
 enabled = true
 priority = 100
+
+# Example: the mooncakes.io index mirrored on GitHub, with downloads from mooncakes.io
+# (moonbit-registry source add moonrockz --from-preset moonrockz)
+# [[sources]]
+# name = "moonrockz"
+# type = "mooncakes"
+# url = "https://mooncakes.io"
+# index_url = "https://github.com/moonrockz/mooncakes-index.git"
+# index_type = "git"
+# download_url = "https://download.mooncakes.io"
+# symbols_url = "https://download.mooncakes.io/symbols.zip"
+# enabled = true
 
 # Example: A partner's private registry (uncomment to use)
 # [[sources]]
@@ -46,9 +66,6 @@ priority = 100
 # [sources.auth]
 # type = "bearer"
 # token = "${PARTNER_REGISTRY_TOKEN}"
-
-# Set the default source for mirroring
-default_source = "mooncakes"
 
 [mirror]
 # Automatically sync with upstream on a schedule
@@ -74,6 +91,18 @@ port = 8080
 # Base URL for the registry (used in generated URLs)
 # Change this to your actual domain in production
 base_url = "http://localhost:8080"
+
+[proxy]
+# Caching proxy mode (also: serve --proxy). The served index is a full copy of
+# the index of the default source. Zips, prebuilt wasm and symbols.zip are
+# downloaded on the first request and then served from the cache.
+enabled = false
+
+# How often to refresh the index from the default source
+index_refresh_interval = "10m"
+
+# How long a cached symbols.zip stays fresh
+symbols_max_age = "1d"
 
 [git]
 # Remote URL to push index updates (optional)

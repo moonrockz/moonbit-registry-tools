@@ -16,6 +16,8 @@ interface SourceAddOptions {
   indexUrl?: string;
   indexType?: string;
   pattern?: string;
+  downloadUrl?: string;
+  symbolsUrl?: string;
   priority?: string;
   fromPreset?: string;
 }
@@ -58,6 +60,9 @@ export function registerSourceCommand(program: Command): void {
           console.log(`    Type: ${src.type}`);
           console.log(`    URL: ${src.url}`);
           console.log(`    Index: ${src.index_url} (${src.index_type})`);
+          if (src.download_url) {
+            console.log(`    Downloads: ${src.download_url}`);
+          }
           if (src.priority !== undefined) {
             console.log(`    Priority: ${src.priority}`);
           }
@@ -81,8 +86,13 @@ export function registerSourceCommand(program: Command): void {
     .option("-i, --index-url <url>", "Index URL")
     .option("--index-type <type>", "Index type (git, http)", "git")
     .option("--pattern <pattern>", "Package URL pattern")
+    .option("--download-url <url>", "Base URL for zips and prebuilt wasm")
+    .option("--symbols-url <url>", "URL of symbols.zip")
     .option("--priority <n>", "Priority (lower = higher priority)", "50")
-    .option("--from-preset <preset>", "Use predefined source as template (mooncakes)")
+    .option(
+      "--from-preset <preset>",
+      `Use predefined source as template (${Object.keys(PREDEFINED_SOURCES).join(", ")})`,
+    )
     .action(async (name: string, options: SourceAddOptions) => {
       try {
         const registryPath = resolvePath(options.dir ?? ".");
@@ -102,6 +112,8 @@ export function registerSourceCommand(program: Command): void {
             name,
             url: options.url ?? preset.url,
             index_url: options.indexUrl ?? preset.index_url,
+            download_url: options.downloadUrl ?? preset.download_url,
+            symbols_url: options.symbolsUrl ?? preset.symbols_url,
           } as MirrorSource;
         } else {
           if (!options.url || !options.indexUrl) {
@@ -125,6 +137,8 @@ export function registerSourceCommand(program: Command): void {
             index_url: options.indexUrl,
             index_type: (options.indexType ?? "git") as "git" | "http",
             package_url_pattern: options.pattern,
+            download_url: options.downloadUrl,
+            symbols_url: options.symbolsUrl,
             enabled: true,
             priority: Number.parseInt(options.priority ?? "50", 10),
           };

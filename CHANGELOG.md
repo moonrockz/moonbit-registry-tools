@@ -7,7 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Caching proxy mode: `serve --proxy` or `[proxy] enabled = true`. The served index is a full
+  copy of the index of the default source, refreshed on start and every
+  `index_refresh_interval` (default `10m`) without blocking requests. When a refresh fails,
+  the proxy logs a warning and serves the last index. Until the first refresh ends (and no
+  index from an earlier run exists), `/git/index` answers `503` with `Retry-After`, so that a
+  client does not clone and keep an empty index. A committed index from an earlier run, in any
+  index layout, is served at once.
+- In proxy mode, the server downloads files from the default source on the first request and
+  caches them: package zips (both URL forms), prebuilt wasm at `/prebuild/...` and the legacy
+  `/assets/...` path (with the `.sha256` files), and `symbols.zip` (fresh for
+  `symbols_max_age`, default `1d`; an old copy is served when upstream fails). Zips are
+  checked against the index checksum and wasm files against the upstream `.sha256`. A cached
+  zip is checked again against the current index checksum once per process; when it does not
+  match, the proxy deletes it and downloads it again. A file
+  with a different checksum is not cached, and the client gets `502`. Concurrent requests for
+  the same missing file share one download. Files are written to a temporary file and renamed.
+- Sources accept `download_url` (base URL for zips and prebuilt wasm) and `symbols_url`.
+  `source add` has `--download-url` and `--symbols-url`. The `mooncakes` preset sets both, and
+  a new `moonrockz` preset uses the index mirror `moonrockz/mooncakes-index` on GitHub with
+  downloads from download.mooncakes.io.
+- `mirror --proxy` (or `mirror` with `[proxy] enabled = true`) fills the proxy cache and does
+  not change the served index. `mirror --prebuild` also downloads the prebuilt wasm of the
+  executable packages in the mirrored zips, when upstream has them.
+- README section "Proxy Mode" and the recipe "Caching Proxy".
+
 ### Fixed
+
+- The saved `registry.toml` put `default_source` after the `[[sources]]` tables, so TOML read it
+  as a key of the last source and the first source became the default. `default_source` is now
+  written before the first table. `registry.example.toml` and the README example had the same
+  problem.
 
 - The GitHub Action `source-add` and `config` commands passed `-d <registry-dir>` before the
   subcommand, so the CLI stopped with `unknown option '-d'`. The option now comes after the

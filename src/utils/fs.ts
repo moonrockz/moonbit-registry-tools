@@ -3,7 +3,7 @@
  */
 
 import { existsSync, mkdirSync, statSync } from "node:fs";
-import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 
 /** Ensure a directory exists, creating it if necessary */
@@ -29,6 +29,19 @@ export async function readText(path: string): Promise<string> {
 export async function writeText(path: string, content: string): Promise<void> {
   await ensureDir(dirname(path));
   await writeFile(path, content, "utf-8");
+}
+
+/** Write a file through a temporary file and a rename, so readers never see a partial file */
+export async function writeFileAtomic(path: string, data: Uint8Array): Promise<void> {
+  await ensureDir(dirname(path));
+  const temp = `${path}.tmp-${process.pid}-${Math.random().toString(36).slice(2)}`;
+  try {
+    await writeFile(temp, data);
+    await rename(temp, path);
+  } catch (err) {
+    await rm(temp, { force: true });
+    throw err;
+  }
 }
 
 /** Read a JSON file */
@@ -148,6 +161,7 @@ export const fs = {
   ensureDirSync,
   readText,
   writeText,
+  writeFileAtomic,
   readJson,
   writeJson,
   readJsonl,

@@ -3,7 +3,10 @@
  */
 
 import { resolve } from "node:path";
+import { parseDuration } from "../utils/duration.ts";
 import logger from "../utils/logger.ts";
+
+export { parseDuration };
 
 /** Format bytes as human-readable size */
 export function formatBytes(bytes: number): string {
@@ -17,26 +20,6 @@ export function formatBytes(bytes: number): string {
   }
 
   return `${size.toFixed(1)} ${units[unitIndex]}`;
-}
-
-/** Parse a duration string (e.g., "1h", "30m") to milliseconds */
-export function parseDuration(duration: string): number {
-  const match = duration.match(/^(\d+)(s|m|h|d)$/);
-  if (!match) {
-    throw new Error(`Invalid duration format: ${duration}`);
-  }
-
-  const value = Number.parseInt(match[1], 10);
-  const unit = match[2];
-
-  const multipliers: Record<string, number> = {
-    s: 1000,
-    m: 60 * 1000,
-    h: 60 * 60 * 1000,
-    d: 24 * 60 * 60 * 1000,
-  };
-
-  return value * multipliers[unit];
 }
 
 /** Resolve a path relative to cwd */
