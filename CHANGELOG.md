@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The pre-push hook no longer uses the two husky lines that husky v9 deprecated, so a push
+  does not show the "husky - DEPRECATED" message. Git no longer tracks the generated file
+  `.husky/_/husky.sh`, so `bun install` does not change it in the working tree.
+
 ## [0.4.0] - 2026-10-23
 
 ### Added
