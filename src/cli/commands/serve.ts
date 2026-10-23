@@ -31,6 +31,9 @@ export function registerServeCommand(program: Command): void {
           host: options.host,
         };
 
+        // Registries mirrored by older versions lack the dumb HTTP info files
+        await registry.indexManager.updateServerInfo();
+
         const server = createServer(registry, serverOptions);
 
         // Handle shutdown

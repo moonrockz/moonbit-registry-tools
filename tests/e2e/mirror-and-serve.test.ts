@@ -6,7 +6,10 @@
  * 2. Mirror a package from mooncakes.io
  * 3. Start the registry server
  * 4. Use moon CLI with MOONCAKES_REGISTRY to install the package
- * 5. Verify the installation succeeded
+ * 5. Verify that the project builds with the package
+ *
+ * moon runs with its own MOON_HOME so the test does not touch the registry
+ * index of the user.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
@@ -110,42 +113,48 @@ describe("E2E: Mirror and Serve", () => {
       console.log("Step 4: Creating test MoonBit project...");
       await mkdir(projectDir, { recursive: true });
 
-      // Create a minimal moon.mod.json
-      const moonMod = {
-        name: "e2e-test-project",
-        version: "0.1.0",
-        deps: {},
-        "test-deps": {},
-      };
-      await writeFile(join(projectDir, "moon.mod.json"), JSON.stringify(moonMod, null, 2));
+      // Current moon rejects `moon.mod.json`; use the `moon.mod` / `moon.pkg` DSL
+      await writeFile(
+        join(projectDir, "moon.mod"),
+        'name = "e2e/test-project"\n\nversion = "0.1.0"\n',
+      );
+      const mainDir = join(projectDir, "main");
+      await mkdir(mainDir, { recursive: true });
+      await writeFile(
+        join(mainDir, "moon.pkg"),
+        `import {\n  "${TEST_PACKAGE}/codec/base64",\n}\n\npkgtype(kind: "executable")\n`,
+      );
+      await writeFile(
+        join(mainDir, "main.mbt"),
+        'fn main {\n  println(@base64.encode(b"hello"))\n}\n',
+      );
 
-      // Create moon.pkg.json for the main package
-      const srcDir = join(projectDir, "src");
-      await mkdir(srcDir, { recursive: true });
-      await writeFile(join(srcDir, "moon.pkg.json"), JSON.stringify({ is_main: true }, null, 2));
-
-      // Create a minimal main.mbt file
-      await writeFile(join(srcDir, "main.mbt"), 'fn main { println("hello") }\n');
-
-      // Step 5: Add dependency using private registry
+      // Step 5: Fetch the index and add the dependency from the private registry
       console.log("Step 5: Adding dependency from private registry...");
       const registryUrl = `http://localhost:${SERVER_PORT}`;
-      const env = { ...process.env, MOONCAKES_REGISTRY: registryUrl };
+      const env = {
+        ...process.env,
+        MOONCAKES_REGISTRY: registryUrl,
+        MOON_HOME: join(tempDir, "moon-home"),
+      };
 
-      // Parse package name for moon add
-      const [username, pkgName] = TEST_PACKAGE.split("/");
-      await $`moon add ${username}/${pkgName}`.cwd(projectDir).env(env);
+      // moon clones the index with `--depth 1`, which needs smart HTTP
+      await $`moon update`.cwd(projectDir).env(env);
+      await $`moon add ${TEST_PACKAGE}`.cwd(projectDir).env(env);
 
-      // Step 6: Verify moon.mod.json contains the dependency
+      // Step 6: Verify moon.mod contains the dependency
       console.log("Step 6: Verifying dependency was added...");
-      const updatedMoonMod = JSON.parse(await readFile(join(projectDir, "moon.mod.json"), "utf-8"));
-      expect(updatedMoonMod.deps).toBeDefined();
-      expect(Object.keys(updatedMoonMod.deps)).toContain(`${username}/${pkgName}`);
+      const updatedMoonMod = await readFile(join(projectDir, "moon.mod"), "utf-8");
+      expect(updatedMoonMod).toContain(`"${TEST_PACKAGE}@`);
 
-      // Step 7: Verify moon check works (validates the dependency can be resolved)
-      console.log("Step 7: Running moon check...");
-      const checkResult = await $`moon check`.cwd(projectDir).env(env).nothrow();
-      expect(checkResult.exitCode).toBe(0);
+      // Step 7: Build and run the project with the mirrored dependency
+      console.log("Step 7: Running moon build...");
+      const buildResult = await $`moon build`.cwd(projectDir).env(env).nothrow();
+      expect(buildResult.exitCode).toBe(0);
+
+      const runResult = await $`moon run main`.cwd(projectDir).env(env).nothrow();
+      expect(runResult.exitCode).toBe(0);
+      expect(runResult.stdout.toString()).toContain("aGVsbG8=");
 
       console.log("E2E test completed successfully!");
     },

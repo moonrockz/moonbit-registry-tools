@@ -58,6 +58,18 @@ describe("Registry", () => {
       expect(loaded.config.registry.name).toBe("existing-registry");
     });
 
+    it("should enable smart HTTP for configs written before it existed", async () => {
+      // moon clones the index shallow, which only smart HTTP supports
+      await Bun.write(
+        join(tempDir, "registry.toml"),
+        '[registry]\nname = "old"\ndata_dir = "./data"\n\n[server]\nport = 8080\n',
+      );
+
+      const loaded = await Registry.load(tempDir);
+
+      expect(loaded.config.server.smart_http?.enabled).toBe(true);
+    });
+
     it("should use defaults if no config file exists", async () => {
       // Create a fresh temp dir for this test to ensure no config exists
       const emptyDir = await mkdtemp(join(tmpdir(), "moonbit-empty-test-"));

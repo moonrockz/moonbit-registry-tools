@@ -40,6 +40,16 @@ export class IndexManager {
       await git.configureUser(this.indexDir, "registry", "registry@local");
       logger.info("Initialized index repository");
     }
+    await this.excludeSourceIndexes();
+  }
+
+  /** Keep the cloned source indexes under `sources/` out of the served index */
+  private async excludeSourceIndexes(): Promise<void> {
+    const excludePath = join(this.indexDir, ".git", "info", "exclude");
+    const current = existsSync(excludePath) ? await fs.readText(excludePath) : "";
+    if (current.split("\n").includes("/sources/")) return;
+    const prefix = current === "" || current.endsWith("\n") ? current : `${current}\n`;
+    await fs.writeText(excludePath, `${prefix}/sources/\n`);
   }
 
   /** Clone the upstream index (legacy method, uses default source) */
@@ -139,24 +149,7 @@ export class IndexManager {
     packageName: string,
     sourceName?: string,
   ): Promise<PackageMetadata | null> {
-    const indexPath = this.getSourceIndexPath(sourceName);
-
-    // Try multiple path formats to support both standard and mooncakes index structure
-    const possiblePaths = [
-      join(indexPath, username, packageName), // standard: {username}/{package}
-      join(indexPath, username, `${packageName}.index`), // mooncakes: {username}/{package}.index
-      join(indexPath, "user", username, packageName), // mooncakes: user/{username}/{package}
-      join(indexPath, "user", username, `${packageName}.index`), // mooncakes: user/{username}/{package}.index
-    ];
-
-    let pkgIndexPath: string | null = null;
-    for (const path of possiblePaths) {
-      if (existsSync(path)) {
-        pkgIndexPath = path;
-        break;
-      }
-    }
-
+    const pkgIndexPath = this.findSourcePackageIndex(username, packageName, sourceName);
     if (!pkgIndexPath) {
       return null;
     }
@@ -181,6 +174,65 @@ export class IndexManager {
     }
   }
 
+  /** Find the index file of a package in a source's index */
+  private findSourcePackageIndex(
+    username: string,
+    packageName: string,
+    sourceName?: string,
+  ): string | null {
+    const indexPath = this.getSourceIndexPath(sourceName);
+
+    // Try multiple path formats to support both standard and mooncakes index structure
+    const possiblePaths = [
+      join(indexPath, username, packageName), // standard: {username}/{package}
+      join(indexPath, username, `${packageName}.index`), // mooncakes: {username}/{package}.index
+      join(indexPath, "user", username, packageName), // mooncakes: user/{username}/{package}
+      join(indexPath, "user", username, `${packageName}.index`), // mooncakes: user/{username}/{package}.index
+    ];
+
+    return possiblePaths.find((path) => existsSync(path)) ?? null;
+  }
+
+  /**
+   * Copy the index files of packages from a source's index into the served
+   * index. The content is copied verbatim so moon sees every upstream field.
+   * Returns the number of package index files that changed.
+   */
+  async publishFromSource(packages: string[], sourceName?: string): Promise<number> {
+    let changed = 0;
+
+    for (const pkgName of packages) {
+      const pkgId = parsePackageId(pkgName);
+      if (!pkgId) continue;
+
+      const sourcePath = this.findSourcePackageIndex(pkgId.username, pkgId.name, sourceName);
+      if (!sourcePath) {
+        logger.warn(`Package ${pkgName} not found in source index, not published`);
+        continue;
+      }
+
+      const content = await fs.readText(sourcePath);
+      const targetPath = this.getPackageIndexPath(pkgId.username, pkgId.name);
+      if (existsSync(targetPath) && (await fs.readText(targetPath)) === content) {
+        continue;
+      }
+
+      await fs.writeText(targetPath, content);
+      changed++;
+    }
+
+    logger.debug(`Published ${changed} package index files`);
+    return changed;
+  }
+
+  /** Write the info files that dumb HTTP git clients need */
+  async updateServerInfo(): Promise<void> {
+    const result = await git.updateServerInfo(this.indexDir);
+    if (!result.success) {
+      logger.warn(`Failed to update git server info: ${result.stderr}`);
+    }
+  }
+
   /** List packages from a specific source's index */
   async listPackagesFromSource(sourceName?: string): Promise<string[]> {
     const indexPath = this.getSourceIndexPath(sourceName);
@@ -195,36 +247,36 @@ export class IndexManager {
 
   /** List packages in a directory */
   private async listPackagesInDir(dir: string): Promise<string[]> {
-    const packages: string[] = [];
-
     logger.debug(`listPackagesInDir: dir=${dir}, exists=${existsSync(dir)}`);
 
     if (!existsSync(dir)) {
-      return packages;
+      return [];
     }
 
-    // Handle mooncakes index structure which has a 'user/' prefix
-    let baseDir = dir;
+    // The mooncakes layout is `user/{username}/{package}.index`; the legacy
+    // layout of this tool is `{username}/{package}`. Read both.
+    const packages = new Set<string>();
     const userSubdir = join(dir, "user");
-    const userSubdirExists = existsSync(userSubdir);
-    const userSubdirIsDir = userSubdirExists && fs.isDirectory(userSubdir);
-    logger.debug(
-      `listPackagesInDir: userSubdir=${userSubdir}, exists=${userSubdirExists}, isDir=${userSubdirIsDir}`,
-    );
-
-    if (userSubdirIsDir) {
-      baseDir = userSubdir;
+    if (fs.isDirectory(userSubdir)) {
+      for (const pkg of await this.listPackagesInBaseDir(userSubdir)) {
+        packages.add(pkg);
+      }
+    }
+    for (const pkg of await this.listPackagesInBaseDir(dir, ["user", "sources"])) {
+      packages.add(pkg);
     }
 
-    logger.debug(`listPackagesInDir: baseDir=${baseDir}`);
+    logger.debug(`listPackagesInDir: returning ${packages.size} packages`);
+    return Array.from(packages).sort();
+  }
+
+  /** List `{username}/{package}` entries below a base directory */
+  private async listPackagesInBaseDir(baseDir: string, skip: string[] = []): Promise<string[]> {
+    const packages: string[] = [];
 
     const users = await fs.listDir(baseDir);
-    logger.debug(
-      `listPackagesInDir: found ${users.length} users: ${users.slice(0, 5).join(", ")}${users.length > 5 ? "..." : ""}`,
-    );
-
     for (const user of users) {
-      if (user.startsWith(".") || user === "sources") continue;
+      if (user.startsWith(".") || skip.includes(user)) continue;
 
       const userDir = join(baseDir, user);
       if (!fs.isDirectory(userDir)) continue;
@@ -240,20 +292,22 @@ export class IndexManager {
       }
     }
 
-    logger.debug(`listPackagesInDir: returning ${packages.length} packages`);
     return packages;
   }
 
-  /** Get path to a package's index file */
+  /** Get path to a package's index file (the layout that moon reads) */
   getPackageIndexPath(username: string, packageName: string): string {
-    return join(this.indexDir, username, packageName);
+    return join(this.indexDir, "user", username, `${packageName}.index`);
   }
 
   /** Read package metadata from index */
   async getPackage(username: string, packageName: string): Promise<PackageMetadata | null> {
-    const indexPath = this.getPackageIndexPath(username, packageName);
+    const legacyPath = join(this.indexDir, username, packageName);
+    const indexPath = [this.getPackageIndexPath(username, packageName), legacyPath].find((path) =>
+      existsSync(path),
+    );
 
-    if (!existsSync(indexPath)) {
+    if (!indexPath) {
       return null;
     }
 
@@ -283,7 +337,6 @@ export class IndexManager {
     }
 
     const indexPath = this.getPackageIndexPath(pkgId.username, pkgId.name);
-    await fs.ensureDir(join(this.indexDir, pkgId.username));
     await fs.appendJsonl(indexPath, entry);
 
     logger.debug(`Wrote entry for ${entry.name}@${entry.version}`);
@@ -291,25 +344,7 @@ export class IndexManager {
 
   /** List all packages in the index */
   async listPackages(): Promise<string[]> {
-    const packages: string[] = [];
-
-    const users = await fs.listDir(this.indexDir);
-    for (const user of users) {
-      if (user.startsWith(".")) continue; // Skip .git, etc.
-
-      const userDir = join(this.indexDir, user);
-      if (!fs.isDirectory(userDir)) continue;
-
-      const pkgs = await fs.listDir(userDir);
-      for (const pkg of pkgs) {
-        const pkgPath = join(userDir, pkg);
-        if (fs.isFile(pkgPath)) {
-          packages.push(`${user}/${pkg}`);
-        }
-      }
-    }
-
-    return packages;
+    return this.listPackagesInDir(this.indexDir);
   }
 
   /** List packages matching a glob pattern */
@@ -320,6 +355,7 @@ export class IndexManager {
 
   /** Commit changes to the index */
   async commit(message: string): Promise<boolean> {
+    await this.excludeSourceIndexes();
     if (!(await git.hasChanges(this.indexDir))) {
       logger.debug("No changes to commit");
       return false;

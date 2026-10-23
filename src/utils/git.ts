@@ -35,6 +35,11 @@ async function runGit(args: string[], cwd?: string): Promise<GitResult> {
   }
 }
 
+/** Write the info/refs and objects/info/packs files for dumb HTTP clients */
+export async function updateServerInfo(dir: string): Promise<GitResult> {
+  return runGit(["update-server-info"], dir);
+}
+
 /** Check if a directory is a git repository ROOT (not just inside a git repo) */
 export async function isGitRepo(dir: string): Promise<boolean> {
   // Check if .git directory exists in this specific directory
@@ -179,6 +184,7 @@ export const git = {
   hasRemote,
   configureUser,
   ensureRepo,
+  updateServerInfo,
 };
 
 export default git;

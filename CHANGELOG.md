@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `mirror` now publishes the index files of mirrored packages to the served index at
+  `user/<owner>/<pkg>.index` (the layout that moon reads) and commits them. Before, the
+  served index stayed empty, so `moon update` against the registry found no packages.
+- `mirror` downloads yanked versions too. moon still selects yanked versions (it only
+  warns that they are deprecated), so a mirror without them broke `moon add`.
+- `mirror` (without `--strict`) now includes all transitive dependencies of every mirrored
+  version, as the documentation says. Before, it included only dependencies that matched
+  the patterns, and only from the latest version that was not yanked.
+- A second `mirror` run downloads new upstream versions of packages that already have a
+  cached version. Before, any cached version made `mirror` skip the whole package.
+- The server accepts `/user/<owner>%2F<pkg>%2F<version>.zip`, the download path that moon
+  requests when `MOONCAKES_REGISTRY` is set.
+- Smart HTTP responses no longer send a duplicate `Content-Type` header, which made git
+  reject them.
+- `git-http-backend` is also found in `git --exec-path` (for example Homebrew git).
+- Changing sources with `addSource`, `removeSource`, `setSourceEnabled`, or
+  `setDefaultSource` now takes effect for index and package operations in the same process.
+
+### Changed
+
+- Smart HTTP is now enabled by default. moon clones the index with `--depth 1`, which the
+  dumb HTTP protocol cannot serve. Set `[server.smart_http] enabled = false` to turn it off.
+- When Smart HTTP is off or `git-http-backend` is missing, `info/refs?service=...` returns
+  the dumb HTTP refs file instead of `501`, so full (not shallow) git clones still work.
+  `serve` and `mirror` now run `git update-server-info` for dumb HTTP clients.
+- `IndexManager.getPackageIndexPath` returns `user/<owner>/<pkg>.index`. Index files in the
+  old `<owner>/<pkg>` layout are still read.
+- `serve` warns when `git.branch` is not `main`, because moon fetches only `main`.
+
+### Added
+
+- `GET /symbols.zip` redirects to `https://download.mooncakes.io/symbols.zip` when the default
+  source is a mooncakes source, so `moon update` does not warn that symbols failed.
+
 ## [0.2.5] - 2026-02-04
 
 ### Fixed

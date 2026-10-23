@@ -151,6 +151,26 @@ cd my-project
 moon build
 ```
 
+Current `moon` releases also read `$MOON_HOME/config.json` (default `~/.moon/config.json`).
+When that file exists, moon ignores `MOONCAKES_REGISTRY`. To use the file instead of the
+environment variable, write:
+
+```json
+{
+  "api": "http://localhost:8080",
+  "index": "http://localhost:8080/git/index",
+  "download": "http://localhost:8080"
+}
+```
+
+#### Server Requirements for moon
+
+- moon clones the index with `git clone --depth 1` and updates it with `git fetch --depth=1`.
+  Shallow fetches need the Git Smart HTTP protocol, so the server needs `git-http-backend`
+  (part of a normal git install). Smart HTTP is on by default (`[server.smart_http]`).
+  Static hosting with the dumb HTTP protocol (for example GitHub Pages) does not work.
+- moon fetches only the `main` branch of the index. Keep `git.branch = "main"`.
+
 ### View/Modify Configuration
 
 ```bash
@@ -292,8 +312,9 @@ When running `moonbit-registry serve`, the following endpoints are available:
 |----------|-------------|
 | `GET /` | Registry info and available endpoints |
 | `GET /health` | Health check |
-| `GET /git/index` | Git index (dumb HTTP protocol) |
-| `GET /user/{username}/{package}/{version}.zip` | Download package |
+| `GET /git/index` | Git index (Smart HTTP, with dumb HTTP fallback) |
+| `GET /user/{username}/{package}/{version}.zip` | Download package (also accepts the `%2F` form that moon sends) |
+| `GET /symbols.zip` | Redirect to the mooncakes.io symbol database (mooncakes sources only) |
 | `GET /user/{username}/{package}` | Package metadata (JSON) |
 
 ## Getting Started

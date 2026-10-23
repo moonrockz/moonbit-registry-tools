@@ -130,6 +130,15 @@ function generateToml(config: RegistryConfig): string {
   lines.push(`base_url = "${config.server.base_url}"`);
   lines.push("");
 
+  if (config.server.smart_http) {
+    lines.push("[server.smart_http]");
+    lines.push(`enabled = ${config.server.smart_http.enabled}`);
+    if (config.server.smart_http.git_http_backend_path) {
+      lines.push(`git_http_backend_path = "${config.server.smart_http.git_http_backend_path}"`);
+    }
+    lines.push("");
+  }
+
   lines.push("[git]");
   lines.push(`remote_url = "${config.git.remote_url}"`);
   lines.push(`branch = "${config.git.branch}"`);

@@ -18,8 +18,8 @@ export function createPackageRoutes(registry: Registry) {
     let packagePath = registry.packageStore.getPackageFile(username, packageName, version);
 
     if (!packagePath) {
-      // Try to download from upstream if enabled
-      if (registry.config.upstream.enabled) {
+      // Try to download from the default source if enabled
+      if (registry.sourceManager.getDefaultSource()?.enabled) {
         try {
           logger.info(`Fetching ${username}/${packageName}@${version} from upstream`);
 
@@ -84,8 +84,24 @@ export function createPackageRoutes(registry: Registry) {
   /** Main router for package endpoints */
   return async function handlePackageRequest(
     _request: Request,
-    pathname: string,
+    rawPathname: string,
   ): Promise<Response | null> {
+    // moon (with MOONCAKES_REGISTRY) encodes the slashes after `/user/`:
+    // `/user/<owner>%2F<pkg>%2F<version>.zip`. Decode to one form.
+    let pathname: string;
+    try {
+      pathname = decodeURIComponent(rawPathname);
+    } catch {
+      return new Response("Bad request", { status: 400 });
+    }
+    // Decoding can make `..` segments and backslashes; they must not leave the store
+    if (pathname.split("/").some((segment) => segment === "." || segment === "..")) {
+      return new Response("Bad request", { status: 400 });
+    }
+    if (pathname.includes("\\")) {
+      return new Response("Bad request", { status: 400 });
+    }
+
     // Match /user/{username}/{package}/{version}.zip
     const downloadMatch = pathname.match(/^\/user\/([^/]+)\/([^/]+)\/([^/]+)\.zip$/);
     if (downloadMatch) {

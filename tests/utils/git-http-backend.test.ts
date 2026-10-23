@@ -3,6 +3,8 @@
  */
 
 import { describe, expect, it } from "bun:test";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { findGitHttpBackend } from "../../src/utils/git-http-backend.ts";
 
 describe("git-http-backend utility", () => {
@@ -17,6 +19,15 @@ describe("git-http-backend utility", () => {
       const result = findGitHttpBackend();
       // We just check it doesn't throw
       expect(result === null || typeof result === "string").toBe(true);
+    });
+
+    it("should find the backend in the git exec path", () => {
+      // Homebrew and other installs keep it only under `git --exec-path`
+      const execPath = Bun.spawnSync(["git", "--exec-path"]).stdout.toString().trim();
+      const candidate = join(execPath, "git-http-backend");
+      if (!existsSync(candidate)) return;
+
+      expect(findGitHttpBackend()).not.toBeNull();
     });
 
     it("should accept custom path if it exists", () => {
