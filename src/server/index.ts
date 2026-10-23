@@ -122,7 +122,16 @@ export function createServer(registry: Registry, options: ServerOptions = {}) {
       const server = Bun.serve({
         hostname: host,
         port,
-        fetch: handler,
+        fetch(request, server) {
+          // A fallback build can take minutes; Bun closes idle connections after 10 s
+          if (registry.proxy.enabled && registry.proxy.fallbacks.anyEnabled) {
+            const path = new URL(request.url).pathname;
+            if (path.startsWith("/user/") || PREBUILD_PREFIXES.some((p) => path.startsWith(p))) {
+              server.timeout(request, 0);
+            }
+          }
+          return handler(request);
+        },
       });
 
       logger.success(`Server listening on http://${host}:${port}`);
@@ -131,6 +140,19 @@ export function createServer(registry: Registry, options: ServerOptions = {}) {
       if (registry.proxy.enabled) {
         const source = registry.sourceManager.getDefaultSource();
         logger.info(`Proxy mode: caching files from source '${source?.name ?? "none"}'`);
+        // Fallback builds get their dependencies through this server
+        registry.proxy.fallbacks.selfUrl = `http://127.0.0.1:${server.port}`;
+        const fallback = registry.proxy.fallbacks.config;
+        if (registry.proxy.fallbacks.anyEnabled) {
+          const on = [
+            fallback.github && "GitHub rebuild",
+            fallback.build_wasm && "local wasm build",
+          ];
+          logger.info(
+            `Proxy fallbacks: ${on.filter(Boolean).join(", ")} (toolchain ${fallback.toolchain})`,
+          );
+          void registry.proxy.fallbacks.ready();
+        }
       }
       if (registry.config.git.branch !== "main") {
         logger.warn(

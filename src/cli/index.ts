@@ -6,6 +6,7 @@ import { Command } from "commander";
 import { setLogLevel, setQuiet } from "../utils/logger.ts";
 import { registerConfigCommand } from "./commands/config.ts";
 import { registerInitCommand } from "./commands/init.ts";
+import { registerManifestCommand } from "./commands/manifest.ts";
 import { registerMirrorCommand } from "./commands/mirror.ts";
 import { registerServeCommand } from "./commands/serve.ts";
 import { registerSourceCommand } from "./commands/source.ts";
@@ -34,6 +35,7 @@ export function createCli(): Command {
   // Register commands
   registerInitCommand(program);
   registerMirrorCommand(program);
+  registerManifestCommand(program);
   registerServeCommand(program);
   registerConfigCommand(program);
   registerSourceCommand(program);

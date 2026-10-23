@@ -112,8 +112,105 @@ index.
 |---------|--------------------|------------------------|
 | Index (`moon update`) | Refreshed every interval | Last index |
 | Zip or wasm in the cache | From the cache | From the cache |
-| Zip or wasm not in the cache | Downloaded, checked, cached | `502` |
+| Zip or wasm not in the cache | Downloaded, checked, cached | `502`, or a fallback when it is on |
 | `symbols.zip` | Downloaded again when older than `symbols_max_age` | Last copy |
+
+## Fallbacks When Upstream Has No File (Optional)
+
+Two fallbacks can make a file that upstream cannot send. They are off by default.
+
+```toml
+[proxy.fallback]
+github = true
+build_wasm = true
+toolchain = "auto"
+moonup = "/usr/local/bin/moonup"
+```
+
+### Rebuild a Zip From GitHub
+
+When the download of a zip fails (no network, `5xx` or `404`), the proxy:
+
+1. Reads the `repository` of the version from the index. It must be a GitHub repository.
+2. Reads the manifest line of the version. Without a manifest line, it stops here.
+3. Downloads the tarball of tag `v<version>`, or of tag `<version>` when the first does not
+   exist. Set `GITHUB_TOKEN` for a higher GitHub rate limit.
+4. Finds the directory whose `moon.mod` or `moon.mod.json` has the name of the module. This
+   can be a subdirectory of the repository.
+5. Runs `moon package` with the toolchain of the publish date.
+6. Compares each file with the manifest, puts the entries in the published order, and
+   computes the SHA-256 of the result.
+
+### Build a Prebuilt Wasm Locally
+
+When upstream has no prebuilt wasm for an executable package, or cannot be reached, the proxy
+gets the zip of the package (from the cache, from upstream, or from a GitHub rebuild), builds
+the package with `moon build --target wasm --release` (then `moon-wasm-opt -O --all-features`
+when the toolchain has it), and serves the result with a `.sha256` file that it writes. Both
+responses have the header `X-Registry-Built-Locally: true`. These files are in
+`prebuild-local/`, apart from the upstream files in `prebuild/`.
+
+moonx waits about 30 seconds for a prebuilt file. The first build of a version can take
+longer, for example when moonup must install a toolchain first. Then moonx fails, but the
+proxy completes the build; run moonx again. To build before you need the files:
+
+```bash
+moonbit-registry mirror 'moonbitlang/parser' --proxy --prebuild
+```
+
+Upstream builds its prebuilds with a toolchain of its choice, sometimes a nightly. To get the
+upstream file byte for byte, set that toolchain, for example `toolchain = "nightly-2026-06-17"`
+gives the upstream `moonfmt.wasm` of `moonbitlang/parser@0.3.4`.
+
+### Trust Model
+
+- A rebuilt zip is served **only when it is byte-identical to the published zip**: its SHA-256
+  must be the checksum in the index. The manifest gives only the order of the entries and the
+  names of the files that are different; it cannot make the proxy serve other bytes. When the
+  rebuild is different, the proxy sends `502` and logs the files that are different.
+- A locally built wasm is **not** byte-identical to the upstream prebuild. The proxy trusts it
+  because it built it from a zip that matches the index checksum, with a known toolchain. A
+  client sees that the file is local from the `X-Registry-Built-Locally` header and from the
+  proxy log.
+
+### Toolchains
+
+Old packages often build only with the toolchain of their time: new moon does not accept
+`moon.mod.json`. With `toolchain = "auto"`, the proxy uses the newest toolchain released before
+the `created_at` of the version and installs it with
+[moonup](https://github.com/chawyehsu/moonup). moonup and its toolchains use a `MOON_HOME` and
+a `MOONUP_HOME` below `data_dir/fallback/toolchains/`, so `~/.moon` does not change. Each
+toolchain takes about 150 MB.
+
+| `toolchain` | Builds use |
+|-------------|------------|
+| `auto` (default) | The toolchain of the publish date, installed with moonup |
+| `"0.6.34+e16ca94e6"` or `"nightly-2026-06-17"` | That toolchain, installed with moonup |
+| `current` | The moon of your `MOON_HOME` (no moonup) |
+
+When moonup is not found, the proxy logs one error and the fallbacks stay off.
+
+Builds get their dependencies through the proxy (with `MOONCAKES_REGISTRY` and a `config.json`
+in the build `MOON_HOME`). Some old toolchains, for example `0.10.0`, download dependency zips
+from download.mooncakes.io directly, so builds with them need that host.
+
+### Manifests
+
+A manifest line has the entries of a published zip in archive order, with the SHA-256 and
+size of each file, plus the checksum of the zip and a `content_digest` that does not depend on
+the order. Manifest files are next to the index, at `manifests/user/<owner>/<pkg>.manifest`.
+moon reads only `user/<owner>/<pkg>.index`, so it does not see them. The proxy copies them with
+the index, so an index mirror that has a `manifests/` directory gives the manifests to all its
+proxies. For an index without one, set `manifest_url` to a base URL with the same layout.
+
+To make the manifests of an index, while upstream is available:
+
+```bash
+moonbit-registry manifest build --index ./mooncakes-index --packages 'moonbitlang/*'
+```
+
+It downloads each zip from the default source, checks it against the index checksum, and adds
+the lines that are missing. Run it again to continue after `--limit` or a failure.
 
 ## Chained Proxies
 
@@ -133,6 +230,8 @@ moonbit-registry serve --proxy --port 8080
 | `index/` | Served index, with the upstream clone in `index/sources/` |
 | `packages/` | Cached zips |
 | `prebuild/` | Cached prebuilt wasm and `.sha256` files |
+| `prebuild-local/` | Prebuilt wasm that the proxy built (fallback) |
+| `fallback/` | Toolchains and temporary files of the fallbacks |
 | `symbols/` | Cached `symbols.zip` |
 
 To clear the cache, stop the proxy and delete `packages/`, `prebuild/` and `symbols/`.

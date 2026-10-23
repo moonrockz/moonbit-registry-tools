@@ -150,4 +150,55 @@ describe("CLI Commands", () => {
       );
     });
   });
+
+  describe("manifest", () => {
+    const fixtures = join(import.meta.dir, "..", "fixtures", "zips");
+
+    it("should print the manifest line of a zip", async () => {
+      const zip = join(fixtures, "tiny-published.zip");
+      const line = JSON.parse(await $`bun ${cliPath} manifest ${zip}`.text());
+      expect(line.checksum).toBe(
+        "b108889bdf53eafd4ebda4825571b304199c318f36c442caa9fa63b666daf94d",
+      );
+      expect(line.entries[0].path).toBe("README.md");
+      expect(typeof line.content_digest).toBe("string");
+    });
+
+    it("should build missing manifest lines for an index directory", async () => {
+      const zip = new Uint8Array(await readFile(join(fixtures, "tiny-published.zip")));
+      const checksum = new Bun.CryptoHasher("sha256").update(zip).digest("hex");
+      const server = Bun.serve({
+        port: 0,
+        fetch: (request) =>
+          new URL(request.url).pathname === "/user/alice/tiny/0.1.0.zip"
+            ? new Response(zip)
+            : new Response("Not found", { status: 404 }),
+      });
+      try {
+        const index = join(tempDir, "index");
+        await $`mkdir -p ${join(index, "user", "alice")}`;
+        await Bun.write(
+          join(index, "user", "alice", "tiny.index"),
+          `${JSON.stringify({ name: "alice/tiny", version: "0.1.0", checksum, deps: {} })}\n`,
+        );
+        const url = `http://localhost:${server.port}`;
+        const first = await $`bun ${cliPath} manifest build --index ${index} --download-url ${url}`
+          .nothrow()
+          .quiet();
+        expect(first.exitCode).toBe(0);
+        expect(first.stdout.toString()).toContain("1 added");
+        const path = join(index, "manifests", "user", "alice", "tiny.manifest");
+        const lines = (await readFile(path, "utf8")).trim().split("\n");
+        expect(lines).toHaveLength(1);
+        expect(JSON.parse(lines[0]).checksum).toBe(checksum);
+
+        const second = await $`bun ${cliPath} manifest build --index ${index} --download-url ${url}`
+          .nothrow()
+          .quiet();
+        expect(second.stdout.toString()).toContain("0 added, 1 already present");
+      } finally {
+        server.stop(true);
+      }
+    });
+  });
 });
